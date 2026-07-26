@@ -1,0 +1,18 @@
+[package]
+name = "packet-cli"
+description = "packet-foundry command-line assembler for crafting packets."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "packet-foundry"
+path = "src/main.rs"
+
+[dependencies]
+packet-core = { path = "../packet-core" }
+protocol-engine = { path = "../protocol-engine" }
+clap = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }

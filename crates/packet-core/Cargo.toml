@@ -1,0 +1,16 @@
+[package]
+name = "packet-core"
+description = "Byte-buffer-authoritative packet document model for Packet Foundry."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
