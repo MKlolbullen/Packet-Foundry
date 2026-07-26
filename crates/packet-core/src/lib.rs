@@ -1,8 +1,26 @@
 //! `packet-core` — the data model for Packet Foundry.
 //!
-//! A packet document is **byte-buffer authoritative**: a single `Vec<u8>` is the source of
-//! truth, and the semantic tree of layers/fields is a set of `BitRange` views over it. Any
-//! bit pattern — including malformed, truncated, or deliberately invalid packets — is always
-//! representable; diagnostics *describe* problems rather than prevent loading.
+//! A [`PacketDocument`] is **byte-buffer authoritative**: a single `Vec<u8>` ([`PacketBuffer`])
+//! is the source of truth, and the semantic tree of [`Layer`]s / [`Field`]s is a set of
+//! [`BitRange`] views over it. Any bit pattern — including malformed, truncated, or deliberately
+//! invalid packets — is always representable; [`Diagnostic`]s *describe* problems rather than
+//! prevent loading.
+//!
+//! Derived fields (checksums, lengths) are expressed as the [`Operation`] IR — the seed of the
+//! eventual drag-and-drop "box" language. The evaluator that runs it lives in `protocol-engine`.
 
-// Modules are added test-first during Phase 1 implementation.
+mod bitrange;
+mod buffer;
+mod diagnostics;
+mod document;
+mod history;
+mod node;
+mod operation;
+
+pub use bitrange::{BitRange, CoreError};
+pub use buffer::PacketBuffer;
+pub use diagnostics::{Diagnostic, Severity};
+pub use document::{PacketDocument, SCHEMA_VERSION};
+pub use history::{Edit, EditHistory};
+pub use node::{Field, FieldKind, Layer};
+pub use operation::Operation;
