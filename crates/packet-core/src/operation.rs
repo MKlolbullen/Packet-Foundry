@@ -5,8 +5,8 @@
 //! drag-and-drop box language; the evaluator lives in the `protocol-engine` crate.
 //!
 //! Phase 1 evaluates the primitives needed to assemble real packets (constants, range reads,
-//! concatenation, bitwise ops, the internet checksum, and buffer-relative lengths). The
-//! remaining variants — integer arithmetic, shifts, and the control-flow / call boxes — are
+//! concatenation, bitwise ops and shifts, the internet checksum, and buffer-relative lengths).
+//! The remaining variants — integer arithmetic and the control-flow / call boxes — are
 //! **reserved**: they round-trip through serialization but the evaluator rejects them until a
 //! later phase gives them defined semantics.
 
@@ -35,6 +35,11 @@ pub enum Operation {
     Xor(Box<Operation>, Box<Operation>),
     /// Bitwise NOT of a byte string.
     Not(Box<Operation>),
+    /// Left shift by `bits`, treating the byte string as one big-endian integer: bits shifted
+    /// past the most-significant end are dropped, the result stays the same length.
+    Shl(Box<Operation>, u32),
+    /// Right shift by `bits` (see [`Operation::Shl`] for the big-endian model).
+    Shr(Box<Operation>, u32),
     /// The 16-bit one's-complement "internet" checksum over the concatenated operands, returned
     /// as 2 big-endian bytes. The classic checksum box (IPv4 header, TCP, UDP, ICMP).
     OnesComplementSum(Vec<Operation>),
@@ -50,10 +55,6 @@ pub enum Operation {
     Add(Box<Operation>, Box<Operation>),
     /// Reserved: integer subtraction.
     Sub(Box<Operation>, Box<Operation>),
-    /// Reserved: left shift by `bits`.
-    Shl(Box<Operation>, u32),
-    /// Reserved: right shift by `bits`.
-    Shr(Box<Operation>, u32),
     /// Reserved: repeat `body` `count` times (the loop box).
     Loop { count: Box<Operation>, body: Box<Operation> },
     /// Reserved: conditional (the if box).
@@ -73,8 +74,6 @@ impl Operation {
             self,
             Operation::Add(..)
                 | Operation::Sub(..)
-                | Operation::Shl(..)
-                | Operation::Shr(..)
                 | Operation::Loop { .. }
                 | Operation::If { .. }
                 | Operation::Call { .. }

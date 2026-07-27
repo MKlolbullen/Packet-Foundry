@@ -1,7 +1,7 @@
 //! The evaluator — the "resolve" pass of the assembler.
 //!
 //! [`evaluate`] walks an [`Operation`] tree and produces the byte string it denotes, reading from
-//! the authoritative [`PacketBuffer`]. Reserved variants (arithmetic, shifts, control flow, calls)
+//! the authoritative [`PacketBuffer`]. Reserved variants (integer arithmetic, control flow, calls)
 //! return [`EngineError::Unsupported`]: they round-trip through serialization but have no defined
 //! semantics yet.
 
@@ -52,10 +52,11 @@ pub fn evaluate(op: &Operation, buffer: &PacketBuffer) -> Result<Vec<u8>, Engine
         }
         Operation::Composite { body, .. } => evaluate(body, buffer),
 
+        Operation::Shl(a, bits) => Ok(shift_left(&evaluate(a, buffer)?, *bits)),
+        Operation::Shr(a, bits) => Ok(shift_right(&evaluate(a, buffer)?, *bits)),
+
         Operation::Add(..) => Err(EngineError::Unsupported("Add")),
         Operation::Sub(..) => Err(EngineError::Unsupported("Sub")),
-        Operation::Shl(..) => Err(EngineError::Unsupported("Shl")),
-        Operation::Shr(..) => Err(EngineError::Unsupported("Shr")),
         Operation::Loop { .. } => Err(EngineError::Unsupported("Loop")),
         Operation::If { .. } => Err(EngineError::Unsupported("If")),
         Operation::Call { .. } => Err(EngineError::Unsupported("Call")),
@@ -84,6 +85,45 @@ fn bitwise(
     let xp = left_pad(&x, n);
     let yp = left_pad(&y, n);
     Ok(xp.iter().zip(yp.iter()).map(|(&p, &q)| f(p, q)).collect())
+}
+
+/// Shift a byte string left by `bits`, treating it as one big big-endian integer: bits shifted
+/// past the most-significant end are dropped, zeros fill in at the least-significant end, and
+/// the output is the same length as the input.
+fn shift_left(bytes: &[u8], bits: u32) -> Vec<u8> {
+    let n = bytes.len();
+    if n == 0 || u64::from(bits) >= (n as u64) * 8 {
+        return vec![0u8; n];
+    }
+    let byte_shift = (bits / 8) as usize;
+    let bit_shift = bits % 8;
+    let get = |idx: usize| -> u8 { if idx < n { bytes[idx] } else { 0 } };
+    (0..n)
+        .map(|i| {
+            let hi = get(i + byte_shift) << bit_shift;
+            let lo = if bit_shift == 0 { 0 } else { get(i + byte_shift + 1) >> (8 - bit_shift) };
+            hi | lo
+        })
+        .collect()
+}
+
+/// Shift a byte string right by `bits` (see [`shift_left`] for the big-endian model).
+fn shift_right(bytes: &[u8], bits: u32) -> Vec<u8> {
+    let n = bytes.len();
+    if n == 0 || u64::from(bits) >= (n as u64) * 8 {
+        return vec![0u8; n];
+    }
+    let byte_shift = (bits / 8) as usize;
+    let bit_shift = bits % 8;
+    let get = |idx: isize| -> u8 { if idx < 0 { 0 } else { bytes.get(idx as usize).copied().unwrap_or(0) } };
+    (0..n as isize)
+        .map(|i| {
+            let base = i - byte_shift as isize;
+            let hi = get(base) >> bit_shift;
+            let lo = if bit_shift == 0 { 0 } else { get(base - 1) << (8 - bit_shift) };
+            hi | lo
+        })
+        .collect()
 }
 
 fn left_pad(v: &[u8], n: usize) -> Vec<u8> {
@@ -229,5 +269,51 @@ mod tests {
     fn reserved_ops_are_unsupported() {
         let op = Operation::Call { name: "foo".into() };
         assert_eq!(evaluate(&op, &buf(&[])).unwrap_err(), EngineError::Unsupported("Call"));
+    }
+
+    #[test]
+    fn shl_shifts_within_a_byte() {
+        // 0x80 << 1 == 0x00 (top bit shifted out, zero-filled from the bottom).
+        let op = Operation::Shl(Box::new(Operation::Const(vec![0x80])), 1);
+        assert_eq!(evaluate(&op, &buf(&[])).unwrap(), vec![0x00]);
+    }
+
+    #[test]
+    fn shl_carries_across_byte_boundary() {
+        // 0x0080 << 1 == 0x0100.
+        let op = Operation::Shl(Box::new(Operation::Const(vec![0x00, 0x80])), 1);
+        assert_eq!(evaluate(&op, &buf(&[])).unwrap(), vec![0x01, 0x00]);
+    }
+
+    #[test]
+    fn shl_by_whole_bytes() {
+        // 0x0001 << 8 == 0x0100.
+        let op = Operation::Shl(Box::new(Operation::Const(vec![0x00, 0x01])), 8);
+        assert_eq!(evaluate(&op, &buf(&[])).unwrap(), vec![0x01, 0x00]);
+    }
+
+    #[test]
+    fn shl_by_at_least_the_full_width_zeroes_out() {
+        let op = Operation::Shl(Box::new(Operation::Const(vec![0xFF, 0xFF])), 16);
+        assert_eq!(evaluate(&op, &buf(&[])).unwrap(), vec![0x00, 0x00]);
+    }
+
+    #[test]
+    fn shr_shifts_within_a_byte() {
+        let op = Operation::Shr(Box::new(Operation::Const(vec![0x01])), 1);
+        assert_eq!(evaluate(&op, &buf(&[])).unwrap(), vec![0x00]);
+    }
+
+    #[test]
+    fn shr_carries_across_byte_boundary() {
+        // 0x0100 >> 1 == 0x0080.
+        let op = Operation::Shr(Box::new(Operation::Const(vec![0x01, 0x00])), 1);
+        assert_eq!(evaluate(&op, &buf(&[])).unwrap(), vec![0x00, 0x80]);
+    }
+
+    #[test]
+    fn shr_by_zero_is_identity() {
+        let op = Operation::Shr(Box::new(Operation::Const(vec![0xAB, 0xCD])), 0);
+        assert_eq!(evaluate(&op, &buf(&[])).unwrap(), vec![0xAB, 0xCD]);
     }
 }
