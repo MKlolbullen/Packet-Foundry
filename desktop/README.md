@@ -1,10 +1,17 @@
 # Packet Foundry — desktop
 
 The Tauri + React shell for Packet Foundry. `src-tauri` is a thin IPC boundary — `default_stack`,
-`create_packet`, and `inspect_packet` just forward to the `packet-core`/`protocol-engine` crates in
-`../crates`; no packet logic lives in this app. The frontend is a JSON-driven builder/inspector for
-now (edit a `ProtocolSpec[]` stack, assemble it, inspect the resulting document); the drag-and-drop
-box editor described in [`../docs/phase-1-design.md`](../docs/phase-1-design.md) is a later phase.
+`create_packet`, `inspect_packet`, and `evaluate_operation` just forward to the
+`packet-core`/`protocol-engine` crates in `../crates`; no packet logic lives in this app.
+
+Two tabs:
+- **Build & Inspect** — edit a `ProtocolSpec[]` JSON stack, assemble it, inspect the resulting
+  document (or a pasted one) and its diagnostics.
+- **Box Editor** — the drag-and-drop `Operation` editor described in
+  [`../docs/phase-1-design.md`](../docs/phase-1-design.md). Drag boxes from the palette onto the
+  canvas to compose a tree, edit leaf parameters, and hit Evaluate to run it through the real
+  engine against a scratch buffer. The data model and tree edits (`src/operation.ts`) have a unit
+  suite: `npm test`.
 
 ## Develop
 

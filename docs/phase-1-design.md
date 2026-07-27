@@ -122,10 +122,26 @@ Depends on `packet-core`.
 - Incremental reactive recompute (dirty-propagation) — Phase 1 resolves derivations in a batch pass.
 - Declarative protocol file format + loader (the `protocols/` dir is reserved).
 - IPv4/TCP options (variable-length; needs loops).
-- The drag-and-drop "zoomable boxes" puzzle editor. A `desktop/` Tauri + React shell now exists
-  (`desktop/src-tauri` calls straight into `packet-core`/`protocol-engine`; `Operation`,
-  `ProtocolSpec`, and their parameter structs are `serde`-tagged for the IPC boundary) with a
-  JSON-driven builder/inspector — a wiring proof, not the box editor itself.
+- Wiring a box's derivation into the protocol/field editing flow (pin/override from the GUI,
+  editing a shipped protocol's fields) — the box editor below is a standalone `Operation`
+  playground, not yet connected to `create_packet`'s document.
+
+### Desktop shell status
+
+A `desktop/` Tauri + React shell exists (`desktop/src-tauri` calls straight into
+`packet-core`/`protocol-engine`; `Operation`, `ProtocolSpec`, and their parameter structs are
+`serde`-tagged for the IPC boundary), with two tabs:
+- **Build & Inspect** — JSON-driven `ProtocolSpec[]` builder + document inspector.
+- **Box Editor** (`desktop/src/{operation,BoxNode,BoxEditor}.tsx`) — the first cut of the
+  "zoomable boxes" puzzle editor. A palette of every `Operation` kind (evaluable and reserved,
+  visually distinguished) can be dragged onto the canvas to fill a child slot or replace an
+  existing box; list-shaped operands (`Concat`, `OnesComplementSum`) support drag-to-append plus
+  buttons to reorder/remove; every leaf parameter (bytes, ranges, widths, shift amounts, names)
+  is directly editable; an "Evaluate" action round-trips the tree through the real
+  `protocol_engine::evaluate` against a scratch buffer, so reserved boxes report the engine's own
+  `EngineError::Unsupported`, not a UI-invented message. Not yet done: freeform canvas
+  positioning/zoom-viewport (nesting today is progressive-disclosure, not spatial), and connecting
+  a box back to a document field's derivation.
 
 ## Verification (end-to-end)
 1. `cargo build` and `cargo test` green (unit + torture + proptest).

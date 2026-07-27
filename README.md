@@ -18,7 +18,7 @@ block them.
 | `packet-core` | Byte-buffer-authoritative document model: `BitRange`, `Operation` IR, layers/fields, diagnostics, JSON. |
 | `protocol-engine` | Operation evaluator, dependency-ordered resolve, built-in protocols (Ethernet II, IPv4, TCP, UDP, ICMP, raw). |
 | `packet-cli` | `packet-foundry` CLI — assemble packets to JSON. |
-| `desktop` | Tauri + React desktop shell — the same engine crates behind a GUI. Currently a JSON-driven builder/inspector; the drag-and-drop box editor lands in a later phase. |
+| `desktop` | Tauri + React desktop shell — the same engine crates behind a GUI. A "Build & Inspect" JSON builder/inspector, plus a "Box Editor" tab: drag `Operation` boxes onto a canvas, nest/reorder/edit them, and evaluate against a scratch buffer via the real engine. |
 
 ### Quick start
 

@@ -2,8 +2,8 @@
 //! `packet-core` / `protocol-engine` crates. No packet logic lives here; every command just
 //! forwards to the engine and reports its `Result` back to the frontend.
 
-use packet_core::PacketDocument;
-use protocol_engine::{ProtocolSpec, assemble, validate};
+use packet_core::{Operation, PacketBuffer, PacketDocument};
+use protocol_engine::{ProtocolSpec, assemble, evaluate, validate};
 
 /// A protocol stack that assembles a valid Ethernet/IPv4/TCP SYN — the same packet the CLI's
 /// README quick start builds. Used to seed the UI with something real to look at.
@@ -41,6 +41,17 @@ fn inspect_packet(document_json: String) -> Result<PacketDocument, String> {
     Ok(doc)
 }
 
+/// Evaluate a single `Operation` against a scratch buffer (hex-encoded) and return its byte
+/// result, also hex-encoded — the box editor's "run this box" action. The same evaluator the
+/// resolve pass uses; reserved variants (Add/Sub/Loop/If/Call) report `EngineError::Unsupported`
+/// exactly as they do during real assembly.
+#[tauri::command]
+fn evaluate_operation(op: Operation, buffer_hex: String) -> Result<String, String> {
+    let bytes = hex::decode(buffer_hex.trim()).map_err(|e| e.to_string())?;
+    let buffer = PacketBuffer::from_bytes(bytes);
+    evaluate(&op, &buffer).map(|out| hex::encode(out)).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -48,7 +59,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             default_stack,
             create_packet,
-            inspect_packet
+            inspect_packet,
+            evaluate_operation
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

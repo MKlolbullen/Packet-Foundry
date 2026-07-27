@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Diagnostic, PacketDocument, ProtocolSpec } from "./types";
 import { formatFieldValue, hexToBytes, locationString } from "./packet";
+import BoxEditor from "./BoxEditor";
 import "./App.css";
 
 function PacketTree({ doc }: { doc: PacketDocument }) {
@@ -55,7 +56,7 @@ function Diagnostics({ diagnostics }: { diagnostics: Diagnostic[] }) {
   );
 }
 
-function App() {
+function BuildAndInspect() {
   const [stackText, setStackText] = useState("");
   const [doc, setDoc] = useState<PacketDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,51 +108,70 @@ function App() {
   }
 
   return (
+    <div className="panes">
+      <section className="pane">
+        <h2>Build</h2>
+        <p className="hint">Edit the protocol stack (an array of `ProtocolSpec`) and assemble it.</p>
+        <textarea
+          className="json-editor"
+          value={stackText}
+          onChange={(e) => setStackText(e.currentTarget.value)}
+          spellCheck={false}
+        />
+        <div className="row">
+          <button onClick={onAssembleClick}>Assemble</button>
+          <button onClick={sendToInspector} disabled={!doc}>
+            Send to Inspect →
+          </button>
+        </div>
+        {error && <p className="error">{error}</p>}
+        {doc && <PacketTree doc={doc} />}
+      </section>
+
+      <section className="pane">
+        <h2>Inspect</h2>
+        <p className="hint">Paste a packet document's JSON and load it — bytes never change, only diagnostics.</p>
+        <textarea
+          className="json-editor"
+          value={inspectText}
+          onChange={(e) => setInspectText(e.currentTarget.value)}
+          placeholder="Paste packet document JSON here…"
+          spellCheck={false}
+        />
+        <div className="row">
+          <button onClick={onInspectClick} disabled={!inspectText}>
+            Inspect
+          </button>
+        </div>
+        {inspectError && <p className="error">{inspectError}</p>}
+        {inspectDoc && <PacketTree doc={inspectDoc} />}
+      </section>
+    </div>
+  );
+}
+
+type Tab = "assemble" | "boxes";
+
+function App() {
+  const [tab, setTab] = useState<Tab>("assemble");
+
+  return (
     <main className="container">
       <header>
         <h1>Packet Foundry</h1>
         <p className="tagline">A bidirectional, non-lossy assembler for wire formats.</p>
       </header>
 
-      <div className="panes">
-        <section className="pane">
-          <h2>Build</h2>
-          <p className="hint">Edit the protocol stack (an array of `ProtocolSpec`) and assemble it.</p>
-          <textarea
-            className="json-editor"
-            value={stackText}
-            onChange={(e) => setStackText(e.currentTarget.value)}
-            spellCheck={false}
-          />
-          <div className="row">
-            <button onClick={onAssembleClick}>Assemble</button>
-            <button onClick={sendToInspector} disabled={!doc}>
-              Send to Inspect →
-            </button>
-          </div>
-          {error && <p className="error">{error}</p>}
-          {doc && <PacketTree doc={doc} />}
-        </section>
+      <nav className="tabs">
+        <button className={tab === "assemble" ? "tab active" : "tab"} onClick={() => setTab("assemble")}>
+          Build &amp; Inspect
+        </button>
+        <button className={tab === "boxes" ? "tab active" : "tab"} onClick={() => setTab("boxes")}>
+          Box Editor
+        </button>
+      </nav>
 
-        <section className="pane">
-          <h2>Inspect</h2>
-          <p className="hint">Paste a packet document's JSON and load it — bytes never change, only diagnostics.</p>
-          <textarea
-            className="json-editor"
-            value={inspectText}
-            onChange={(e) => setInspectText(e.currentTarget.value)}
-            placeholder="Paste packet document JSON here…"
-            spellCheck={false}
-          />
-          <div className="row">
-            <button onClick={onInspectClick} disabled={!inspectText}>
-              Inspect
-            </button>
-          </div>
-          {inspectError && <p className="error">{inspectError}</p>}
-          {inspectDoc && <PacketTree doc={inspectDoc} />}
-        </section>
-      </div>
+      {tab === "assemble" ? <BuildAndInspect /> : <BoxEditor />}
     </main>
   );
 }
