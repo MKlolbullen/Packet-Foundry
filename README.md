@@ -40,6 +40,30 @@ npm run tauri dev
 
 See [`docs/phase-1-design.md`](docs/phase-1-design.md) for the engine design.
 
+## Screenshots
+
+**Build & Inspect** — assemble a protocol stack from JSON, inspect the resolved layer/field tree
+and diagnostics:
+
+![Build & Inspect tab](docs/screenshots/build-inspect.png)
+
+**Box Editor** — drag `Operation` boxes onto a pannable, zoomable canvas (drag empty space to
+pan, scroll to zoom, or use the toolbar's zoom/fit controls); this is the real IPv4 header
+checksum expression, "Fit" to frame it after evaluating it against the known-good test vector:
+
+![Box Editor tab](docs/screenshots/box-editor.png)
+
+**Control-flow boxes** — `Loop`/`If` render as Scratch/Blockly-style "C-blocks": the condition
+sits inline in the header, the body is wrapped by a connecting rail instead of just another
+labeled slot. Reserved (the Phase 1 evaluator doesn't execute them yet), but round-trip and
+compose like any other box:
+
+![Loop rendered as a C-block](docs/screenshots/control-flow-block.png)
+
+**Theme** — System/Light/Dark, top-right of the header, persisted across sessions:
+
+![Dark theme](docs/screenshots/dark-theme.png)
+
 ## License
 
 MIT OR Apache-2.0.

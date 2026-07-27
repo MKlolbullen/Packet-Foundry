@@ -29,6 +29,21 @@ header {
   margin-bottom: 1.5rem;
 }
 
+.header-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.header-spacer {
+  flex: 1 1 0;
+}
+
+.header-titles {
+  flex: 0 1 auto;
+}
+
 h1 {
   margin: 0;
 }
@@ -36,6 +51,32 @@ h1 {
 .tagline {
   color: #666;
   margin-top: 0.25rem;
+}
+
+.theme-toggle {
+  flex: 1 1 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.2rem;
+  background: #eee;
+  border-radius: 8px;
+  padding: 0.2rem;
+  height: fit-content;
+}
+
+.theme-option {
+  padding: 0.3em 0.7em;
+  font-size: 0.8em;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: #555;
+}
+
+.theme-option.active {
+  background: #ffffff;
+  color: #0f0f0f;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .panes {
@@ -285,15 +326,91 @@ button:disabled {
   border-radius: 10px;
   padding: 1rem 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  overflow-x: auto;
 }
 
 .canvas h2 {
   margin-top: 0;
+  margin-bottom: 0;
 }
 
-.canvas-tree {
-  min-width: max-content;
+.canvas-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.toolbar-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.toolbar-controls button {
+  padding: 0.3em 0.65em;
+  font-size: 0.85em;
+}
+
+.zoom-readout {
+  font-size: 0.8em;
+  color: #666;
+  min-width: 3.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  background: #ddd;
+  margin: 0 0.15em;
+}
+
+.toolbar-feedback {
+  font-size: 0.8em;
+  color: #2a7a2a;
+}
+
+.import-bar {
+  margin: 0.3rem 0 0.8rem;
+}
+
+.json-editor.small {
+  height: 8em;
+}
+
+.row.wrap {
+  flex-wrap: wrap;
+}
+
+/* ---- pan/zoom viewport ---- */
+
+.viewport {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  height: 55vh;
+  min-height: 380px;
+  cursor: grab;
+  background-color: #fafafa;
+  background-image: radial-gradient(circle, #d7d7d7 1px, transparent 1px);
+  touch-action: none;
+}
+
+.viewport.panning {
+  cursor: grabbing;
+}
+
+.world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  transform-origin: 0 0;
 }
 
 .box-node {
@@ -313,6 +430,69 @@ button:disabled {
 .box-node.drag-over {
   border-color: #396cd8;
   box-shadow: 0 0 0 2px rgba(57, 108, 216, 0.35);
+}
+
+/* ---- control-flow "C-block" (Loop / If) ----
+   A Scratch/Blockly-style wrap: a header bar carrying the scalar condition inline, then one or
+   more indented body sections connected by a left "rail", closed off by a bottom bar — so the
+   block visually wraps around what it controls instead of just listing it as another slot. */
+
+.box-node.control-flow {
+  background: #fff8e8;
+  border-color: #e0b34d;
+  border-width: 2px;
+  padding-bottom: 0.5em;
+}
+
+.cf-header {
+  font-weight: 600;
+}
+
+.cf-inline-slot {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.cf-inline-slot .slot-label {
+  margin-bottom: 0;
+}
+
+.cf-block {
+  display: flex;
+  margin: 0 0.6em;
+}
+
+.cf-rail {
+  flex: 0 0 auto;
+  width: 0.6em;
+  border-left: 3px solid #e0b34d;
+  border-bottom: 3px solid #e0b34d;
+  border-radius: 0 0 0 6px;
+  margin-right: 0.3em;
+}
+
+.cf-block-inner {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.2em 0 0.4em;
+}
+
+.cf-caption {
+  display: block;
+  font-size: 0.7em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #a07515;
+  margin-bottom: 0.15em;
+}
+
+.cf-close {
+  height: 0.6em;
+  margin: 0 0.6em 0 calc(0.6em + 0.9em);
+  border-left: 3px solid #e0b34d;
+  border-radius: 0 0 0 6px;
 }
 
 .box-header {
@@ -442,90 +622,134 @@ button:disabled {
   word-break: break-all;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
+/* Theme: driven entirely by the `data-theme` attribute App.tsx stamps onto <html> (see
+   theme.ts) — "system" resolves to one of these at runtime via matchMedia, so no
+   `@media (prefers-color-scheme)` fallback is needed here. */
 
-  .pane {
-    background: #262626;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-  }
+:root[data-theme="dark"] {
+  color: #f6f6f6;
+  background-color: #2f2f2f;
+}
 
-  .layer {
-    border-color: #3a3a3a;
-  }
+:root[data-theme="dark"] .pane {
+  background: #262626;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
 
-  .layer-name {
-    background: #1f1f1f;
-  }
+:root[data-theme="dark"] .layer {
+  border-color: #3a3a3a;
+}
 
-  .fields td {
-    border-top-color: #3a3a3a;
-  }
+:root[data-theme="dark"] .layer-name {
+  background: #1f1f1f;
+}
 
-  .json-editor {
-    background: #1c1c1c;
-    color: #f6f6f6;
-    border-color: #444;
-  }
+:root[data-theme="dark"] .fields td {
+  border-top-color: #3a3a3a;
+}
 
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
+:root[data-theme="dark"] .json-editor {
+  background: #1c1c1c;
+  color: #f6f6f6;
+  border-color: #444;
+}
 
-  .tagline,
-  .hint,
-  .loc,
-  .field-marker {
-    color: #aaa;
-  }
+:root[data-theme="dark"] button {
+  color: #ffffff;
+  background-color: #0f0f0f98;
+}
 
-  .palette,
-  .canvas {
-    background: #262626;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-  }
+:root[data-theme="dark"] .tagline,
+:root[data-theme="dark"] .hint,
+:root[data-theme="dark"] .loc,
+:root[data-theme="dark"] .field-marker {
+  color: #aaa;
+}
 
-  .palette h3 {
-    color: #aaa;
-  }
+:root[data-theme="dark"] .palette,
+:root[data-theme="dark"] .canvas {
+  background: #262626;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
 
-  .box-node {
-    background: #20242e;
-    border-color: #35406b;
-  }
+:root[data-theme="dark"] .palette h3 {
+  color: #aaa;
+}
 
-  .box-node.kind-reserved {
-    background: #232323;
-    border-color: #3a3a3a;
-  }
+:root[data-theme="dark"] .box-node {
+  background: #20242e;
+  border-color: #35406b;
+}
 
-  .box-children {
-    border-top-color: #2c3350;
-  }
+:root[data-theme="dark"] .box-node.kind-reserved {
+  background: #232323;
+  border-color: #3a3a3a;
+}
 
-  .box-input {
-    background: #1c1c1c;
-    color: #f6f6f6;
-    border-color: #444;
-  }
+:root[data-theme="dark"] .box-node.control-flow {
+  background: #241d10;
+  border-color: #6b4f1f;
+}
 
-  .palette-chip {
-    background: #1e2740;
-    border-color: #35406b;
-    color: #9db4ec;
-  }
+:root[data-theme="dark"] .box-children {
+  border-top-color: #2c3350;
+}
 
-  .append-zone {
-    border-color: #35406b;
-    color: #888;
-  }
+:root[data-theme="dark"] .cf-rail,
+:root[data-theme="dark"] .cf-close {
+  border-color: #6b4f1f;
+}
 
-  .slot-label,
-  .param-label {
-    color: #999;
-  }
+:root[data-theme="dark"] .cf-caption {
+  color: #d9b25c;
+}
+
+:root[data-theme="dark"] .box-input {
+  background: #1c1c1c;
+  color: #f6f6f6;
+  border-color: #444;
+}
+
+:root[data-theme="dark"] .palette-chip {
+  background: #1e2740;
+  border-color: #35406b;
+  color: #9db4ec;
+}
+
+:root[data-theme="dark"] .append-zone {
+  border-color: #35406b;
+  color: #888;
+}
+
+:root[data-theme="dark"] .slot-label,
+:root[data-theme="dark"] .param-label {
+  color: #999;
+}
+
+:root[data-theme="dark"] .viewport {
+  background-color: #1b1e26;
+  border-color: #3a3a3a;
+  background-image: radial-gradient(circle, #3a3f4c 1px, transparent 1px);
+}
+
+:root[data-theme="dark"] .zoom-readout,
+:root[data-theme="dark"] .hint {
+  color: #aaa;
+}
+
+:root[data-theme="dark"] .toolbar-sep {
+  background: #444;
+}
+
+:root[data-theme="dark"] .theme-toggle {
+  background: #1c1c1c;
+}
+
+:root[data-theme="dark"] .theme-option {
+  color: #ccc;
+}
+
+:root[data-theme="dark"] .theme-option.active {
+  background: #3a3a3a;
+  color: #ffffff;
 }

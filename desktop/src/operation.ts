@@ -72,6 +72,29 @@ export function isReserved(op: Operation): boolean {
   return RESERVED_KINDS.includes(opKind(op));
 }
 
+/** How a control-flow kind (Loop, If) lays out as a Scratch/Blockly-style "C-block": a header
+ * bar carrying its scalar-ish condition inline, and one or more indented body sections wrapped by
+ * a connecting rail — the shape in the box editor's control-flow styling. `null` for every other
+ * kind, which uses the plain fixed/list slot rendering instead. */
+export interface ControlFlowLayout {
+  inline: string[];
+  blocks: { label: string; caption: string }[];
+}
+
+export function controlFlowLayout(op: Operation): ControlFlowLayout | null {
+  if ("Loop" in op) return { inline: ["count"], blocks: [{ label: "body", caption: "do" }] };
+  if ("If" in op) {
+    return {
+      inline: ["cond"],
+      blocks: [
+        { label: "then", caption: "then" },
+        { label: "else", caption: "else" },
+      ],
+    };
+  }
+  return null;
+}
+
 /**
  * Child slot labels for a kind: `null` for leaves with no operation children, `"list"` for
  * variable-length children (Concat/OnesComplementSum), or the fixed slot names in order.

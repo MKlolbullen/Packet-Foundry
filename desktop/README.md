@@ -8,10 +8,14 @@ Two tabs:
 - **Build & Inspect** — edit a `ProtocolSpec[]` JSON stack, assemble it, inspect the resulting
   document (or a pasted one) and its diagnostics.
 - **Box Editor** — the drag-and-drop `Operation` editor described in
-  [`../docs/phase-1-design.md`](../docs/phase-1-design.md). Drag boxes from the palette onto the
-  canvas to compose a tree, edit leaf parameters, and hit Evaluate to run it through the real
-  engine against a scratch buffer. The data model and tree edits (`src/operation.ts`) have a unit
-  suite: `npm test`.
+  [`../docs/phase-1-design.md`](../docs/phase-1-design.md). Drag boxes from the palette onto a
+  pannable/zoomable canvas (drag empty space to pan, scroll to zoom, or use the toolbar) to
+  compose a tree, edit leaf parameters, and hit Evaluate to run it through the real engine against
+  a scratch buffer. `Loop`/`If` render as Scratch-style C-blocks. The data model and tree edits
+  (`src/operation.ts`) have a unit suite: `npm test`.
+
+Both tabs stay mounted when you switch between them, so neither loses its draft. Theme
+(System/Light/Dark) is in the header, top right.
 
 ## Develop
 

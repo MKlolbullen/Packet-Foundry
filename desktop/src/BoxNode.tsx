@@ -1,10 +1,11 @@
 import { useState } from "react";
-import type { DragEvent } from "react";
+import type { DragEvent, ReactNode } from "react";
 import {
   type Operation,
   type OpKind,
   bytesToHex,
   childLabels,
+  controlFlowLayout,
   defaultOperation,
   getChildren,
   hexToBytesArray,
@@ -163,6 +164,7 @@ export default function BoxNode({ op, path, onChange, onInsert, onRemoveItem, on
   const labels = childLabels(op);
   const children = getChildren(op);
   const reserved = isReserved(op);
+  const layout = controlFlowLayout(op);
 
   function handleDrop(e: DragEvent) {
     if (!acceptsDrop(e)) return;
@@ -182,37 +184,90 @@ export default function BoxNode({ op, path, onChange, onInsert, onRemoveItem, on
     if (dropped) onInsert(path, children.length, dropped);
   }
 
-  return (
-    <div
-      className={`box-node kind-${reserved ? "reserved" : "primitive"}${dragOver ? " drag-over" : ""}`}
-      onDragOver={(e) => {
-        if (acceptsDrop(e)) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      }}
-      onDragEnter={(e) => {
-        if (acceptsDrop(e)) setDragOver(true);
-      }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={handleDrop}
-    >
+  function childAt(index: number) {
+    return (
+      <BoxNode
+        op={children[index]}
+        path={[...path, index]}
+        onChange={onChange}
+        onInsert={onInsert}
+        onRemoveItem={onRemoveItem}
+        onMoveItem={onMoveItem}
+      />
+    );
+  }
+
+  const containerClass = `box-node kind-${reserved ? "reserved" : "primitive"}${layout ? " control-flow" : ""}${dragOver ? " drag-over" : ""}`;
+  const containerHandlers = {
+    onDragOver: (e: DragEvent) => {
+      if (acceptsDrop(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    onDragEnter: (e: DragEvent) => {
+      if (acceptsDrop(e)) setDragOver(true);
+    },
+    onDragLeave: () => setDragOver(false),
+    onDrop: handleDrop,
+  };
+  function header(extraClass: string, content?: ReactNode) {
+    return (
       <div
-        className="box-header"
+        className={`box-header${extraClass}`}
         draggable
-        onDragStart={(e) => {
+        onDragStart={(e: DragEvent) => {
           e.dataTransfer.setData(SUBTREE_JSON_MIME, JSON.stringify(op));
           e.dataTransfer.effectAllowed = "copy";
         }}
       >
         <span className="box-kind">{kind}</span>
         {reserved && <span className="box-reserved-badge">reserved</span>}
-        <ParamInputs op={op} onChange={(newOp) => onChange(path, newOp)} />
+        {content}
       </div>
+    );
+  }
+
+  // Control-flow kinds (Loop, If) render as a Scratch/Blockly-style "C-block": their scalar-ish
+  // slot (count / cond) sits inline in the header, and each remaining slot becomes an indented,
+  // rail-connected body section instead of a plain labeled slot.
+  if (layout && Array.isArray(labels)) {
+    const inlineContent = layout.inline.map((label) => {
+      const i = labels.indexOf(label);
+      return (
+        <div className="cf-inline-slot" key={label}>
+          <span className="slot-label">{label}</span>
+          {childAt(i)}
+        </div>
+      );
+    });
+    return (
+      <div className={containerClass} {...containerHandlers}>
+        {header(" cf-header", inlineContent)}
+        {layout.blocks.map(({ label, caption }) => {
+          const i = labels.indexOf(label);
+          return (
+            <div className="cf-block" key={label}>
+              <div className="cf-rail" />
+              <div className="cf-block-inner">
+                <span className="cf-caption">{caption}</span>
+                {childAt(i)}
+              </div>
+            </div>
+          );
+        })}
+        <div className="cf-close" />
+      </div>
+    );
+  }
+
+  return (
+    <div className={containerClass} {...containerHandlers}>
+      {header("", <ParamInputs op={op} onChange={(newOp) => onChange(path, newOp)} />)}
 
       {labels === "list" && (
         <div className="box-children list">
-          {children.map((child, i) => (
+          {children.map((_, i) => (
             <div className="list-item" key={i}>
               <div className="list-item-controls">
                 <button
@@ -235,14 +290,7 @@ export default function BoxNode({ op, path, onChange, onInsert, onRemoveItem, on
                   ×
                 </button>
               </div>
-              <BoxNode
-                op={child}
-                path={[...path, i]}
-                onChange={onChange}
-                onInsert={onInsert}
-                onRemoveItem={onRemoveItem}
-                onMoveItem={onMoveItem}
-              />
+              {childAt(i)}
             </div>
           ))}
           <div
@@ -269,14 +317,7 @@ export default function BoxNode({ op, path, onChange, onInsert, onRemoveItem, on
           {labels.map((label, i) => (
             <div className="fixed-slot" key={label}>
               <span className="slot-label">{label}</span>
-              <BoxNode
-                op={children[i]}
-                path={[...path, i]}
-                onChange={onChange}
-                onInsert={onInsert}
-                onRemoveItem={onRemoveItem}
-                onMoveItem={onMoveItem}
-              />
+              {childAt(i)}
             </div>
           ))}
         </div>
