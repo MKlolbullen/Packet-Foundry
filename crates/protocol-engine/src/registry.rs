@@ -5,13 +5,15 @@
 //! (lengths, checksums) in dependency order.
 
 use packet_core::{PacketBuffer, PacketDocument};
+use serde::{Deserialize, Serialize};
 
 use crate::eval::EngineError;
 use crate::protocols::{ethernet, icmp, ipv4, raw, tcp, udp};
 use crate::resolve::resolve;
 
-/// One protocol layer to place in a packet, with its parameters.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One protocol layer to place in a packet, with its parameters. Serializes externally-tagged,
+/// e.g. `{"Tcp": {"src_port": 1234, ...}}` or `{"Raw": [1, 2, 3]}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolSpec {
     Ethernet(ethernet::EthernetParams),
     Ipv4(ipv4::Ipv4Params),

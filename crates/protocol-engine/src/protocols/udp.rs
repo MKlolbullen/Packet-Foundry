@@ -2,12 +2,13 @@
 //! pseudo-header (as TCP does) plus the datagram.
 
 use packet_core::{BitRange, Field, FieldKind, Layer, Operation};
+use serde::{Deserialize, Serialize};
 
 /// Length of a UDP header in bytes.
 pub const LEN: usize = 8;
 
 /// Parameters for a UDP header.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UdpParams {
     pub src_port: u16,
     pub dst_port: u16,

@@ -122,7 +122,10 @@ Depends on `packet-core`.
 - Incremental reactive recompute (dirty-propagation) — Phase 1 resolves derivations in a batch pass.
 - Declarative protocol file format + loader (the `protocols/` dir is reserved).
 - IPv4/TCP options (variable-length; needs loops).
-- All GUI (Tauri/React).
+- The drag-and-drop "zoomable boxes" puzzle editor. A `desktop/` Tauri + React shell now exists
+  (`desktop/src-tauri` calls straight into `packet-core`/`protocol-engine`; `Operation`,
+  `ProtocolSpec`, and their parameter structs are `serde`-tagged for the IPC boundary) with a
+  JSON-driven builder/inspector — a wiring proof, not the box editor itself.
 
 ## Verification (end-to-end)
 1. `cargo build` and `cargo test` green (unit + torture + proptest).

@@ -2,12 +2,13 @@
 //! authored as the same `Operation` IR the eventual box language uses.
 
 use packet_core::{BitRange, Field, FieldKind, Layer, Operation};
+use serde::{Deserialize, Serialize};
 
 /// Length of an IPv4 header without options, in bytes.
 pub const LEN: usize = 20;
 
 /// Parameters for an IPv4 header. Version (4) and IHL (5) are fixed in Phase 1.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ipv4Params {
     pub dscp_ecn: u8,
     pub identification: u16,

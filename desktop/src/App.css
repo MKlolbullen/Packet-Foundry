@@ -1,0 +1,246 @@
+:root {
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color: #0f0f0f;
+  background-color: #f6f6f6;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.container {
+  margin: 0 auto;
+  max-width: 1400px;
+  padding: 2rem;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+h1 {
+  margin: 0;
+}
+
+.tagline {
+  color: #666;
+  margin-top: 0.25rem;
+}
+
+.panes {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.pane {
+  flex: 1 1 480px;
+  min-width: 0;
+  text-align: left;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.pane h2 {
+  margin-top: 0;
+}
+
+.hint {
+  color: #666;
+  font-size: 0.85em;
+  margin-top: -0.5rem;
+}
+
+.json-editor {
+  width: 100%;
+  height: 14em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  border-radius: 6px;
+  border: 1px solid #d0d0d0;
+  padding: 0.6em;
+  resize: vertical;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.6rem 0;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.5em 1.1em;
+  font-size: 0.95em;
+  font-weight: 500;
+  font-family: inherit;
+  color: #0f0f0f;
+  background-color: #eee;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+button:hover:not(:disabled) {
+  border-color: #396cd8;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #b3261e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  white-space: pre-wrap;
+}
+
+.tree-summary {
+  color: #666;
+  font-size: 0.85em;
+}
+
+.layer {
+  margin-bottom: 1rem;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.layer-name {
+  background: #f0f0f0;
+  padding: 0.4em 0.7em;
+  font-weight: 600;
+}
+
+.loc {
+  color: #888;
+  font-weight: 400;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.fields {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+
+.fields td {
+  padding: 0.3em 0.7em;
+  border-top: 1px solid #eee;
+}
+
+.field-name {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.field-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  word-break: break-all;
+}
+
+.field-marker {
+  color: #888;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.diagnostics-none {
+  color: #2a7a2a;
+}
+
+.diagnostics ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.4em 0 0;
+}
+
+.diagnostics li {
+  padding: 0.3em 0;
+  font-size: 0.85em;
+}
+
+.sev-badge {
+  display: inline-block;
+  min-width: 4.5em;
+  text-align: center;
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+  font-size: 0.85em;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.sev-error .sev-badge {
+  background: #fbdcd9;
+  color: #b3261e;
+}
+
+.sev-warning .sev-badge {
+  background: #fdecc8;
+  color: #8a5a00;
+}
+
+.sev-info .sev-badge {
+  background: #dbe8ff;
+  color: #2952a3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #f6f6f6;
+    background-color: #2f2f2f;
+  }
+
+  .pane {
+    background: #262626;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+
+  .layer {
+    border-color: #3a3a3a;
+  }
+
+  .layer-name {
+    background: #1f1f1f;
+  }
+
+  .fields td {
+    border-top-color: #3a3a3a;
+  }
+
+  .json-editor {
+    background: #1c1c1c;
+    color: #f6f6f6;
+    border-color: #444;
+  }
+
+  button {
+    color: #ffffff;
+    background-color: #0f0f0f98;
+  }
+
+  .tagline,
+  .hint,
+  .loc,
+  .field-marker {
+    color: #aaa;
+  }
+}

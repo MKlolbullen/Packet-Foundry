@@ -2,12 +2,13 @@
 //! no pseudo-header — the simplest checksum box in the set.
 
 use packet_core::{BitRange, Field, FieldKind, Layer, Operation};
+use serde::{Deserialize, Serialize};
 
 /// Length of the ICMP echo header in bytes.
 pub const LEN: usize = 8;
 
 /// Parameters for an ICMP echo message.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IcmpParams {
     pub icmp_type: u8,
     pub code: u8,

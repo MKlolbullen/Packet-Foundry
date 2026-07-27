@@ -11,13 +11,14 @@ the byte buffer stays authoritative, any packet — including malformed, truncat
 invalid ones — round-trips losslessly, with diagnostics that *describe* problems rather than
 block them.
 
-## Status: Phase 1 — headless engine
+## Status: Phase 1 engine, Phase 2 GUI shell underway
 
 | Crate | Role |
 |-------|------|
 | `packet-core` | Byte-buffer-authoritative document model: `BitRange`, `Operation` IR, layers/fields, diagnostics, JSON. |
 | `protocol-engine` | Operation evaluator, dependency-ordered resolve, built-in protocols (Ethernet II, IPv4, TCP, UDP, ICMP, raw). |
 | `packet-cli` | `packet-foundry` CLI — assemble packets to JSON. |
+| `desktop` | Tauri + React desktop shell — the same engine crates behind a GUI. Currently a JSON-driven builder/inspector; the drag-and-drop box editor lands in a later phase. |
 
 ### Quick start
 
@@ -29,7 +30,15 @@ cargo run -p packet-cli -- create ethernet ipv4 tcp \
 cargo run -p packet-cli -- inspect syn.packet.json
 ```
 
-See [`docs/phase-1-design.md`](docs/phase-1-design.md) for the full design.
+### Desktop app
+
+```sh
+cd desktop
+npm install
+npm run tauri dev
+```
+
+See [`docs/phase-1-design.md`](docs/phase-1-design.md) for the engine design.
 
 ## License
 

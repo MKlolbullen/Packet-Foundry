@@ -4,6 +4,7 @@ members = [
     "crates/packet-core",
     "crates/protocol-engine",
     "crates/packet-cli",
+    "desktop/src-tauri",
 ]
 
 [workspace.package]
