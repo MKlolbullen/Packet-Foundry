@@ -193,7 +193,7 @@ fn print_tree(doc: &PacketDocument) {
     println!("Packet: {} bytes", doc.buffer.len());
     for layer in &doc.layers {
         let r = layer.range;
-        println!("  {} [{}..{}]", layer.name, r.start_bit / 8, (r.start_bit + r.len_bits + 7) / 8);
+        println!("  {} [{}..{}]", layer.name, r.start_bit / 8, (r.start_bit + r.len_bits).div_ceil(8));
         for field in &layer.fields {
             println!(
                 "    {:<16} {:<12} = {}{}",

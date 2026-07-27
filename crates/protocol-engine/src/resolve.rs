@@ -233,7 +233,7 @@ fn expected_bytes(doc: &PacketDocument, range: BitRange, derivation: &Operation)
 /// Byte interval `[start, end)` covered by a range (rounding out to whole bytes).
 fn byte_span(range: BitRange) -> (usize, usize) {
     let start = range.start_bit / 8;
-    let end = (range.start_bit + range.len_bits + 7) / 8;
+    let end = (range.start_bit + range.len_bits).div_ceil(8);
     (start, end)
 }
 
