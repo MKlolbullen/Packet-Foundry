@@ -54,6 +54,12 @@ struct CreateArgs {
     /// UTF-8 payload text appended as a raw layer.
     #[arg(long)]
     payload: Option<String>,
+    /// ICMP message type (default 8 = echo request).
+    #[arg(long)]
+    icmp_type: Option<u8>,
+    /// ICMP code (default 0).
+    #[arg(long)]
+    icmp_code: Option<u8>,
 
     /// Output JSON path.
     #[arg(short, long)]
@@ -136,6 +142,22 @@ fn build_stack(args: &CreateArgs) -> Result<Vec<ProtocolSpec>> {
                 }
                 if let Some(f) = &args.flags {
                     p.flags = parse_flags(f)?;
+                }
+            }
+            ProtocolSpec::Udp(p) => {
+                if let Some(v) = args.src_port {
+                    p.src_port = v;
+                }
+                if let Some(v) = args.dst_port {
+                    p.dst_port = v;
+                }
+            }
+            ProtocolSpec::Icmp(p) => {
+                if let Some(v) = args.icmp_type {
+                    p.icmp_type = v;
+                }
+                if let Some(v) = args.icmp_code {
+                    p.code = v;
                 }
             }
             ProtocolSpec::Raw(data) => {

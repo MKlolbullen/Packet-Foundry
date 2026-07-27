@@ -7,7 +7,7 @@
 use packet_core::{PacketBuffer, PacketDocument};
 
 use crate::eval::EngineError;
-use crate::protocols::{ethernet, ipv4, raw, tcp};
+use crate::protocols::{ethernet, icmp, ipv4, raw, tcp, udp};
 use crate::resolve::resolve;
 
 /// One protocol layer to place in a packet, with its parameters.
@@ -16,6 +16,8 @@ pub enum ProtocolSpec {
     Ethernet(ethernet::EthernetParams),
     Ipv4(ipv4::Ipv4Params),
     Tcp(tcp::TcpParams),
+    Udp(udp::UdpParams),
+    Icmp(icmp::IcmpParams),
     Raw(Vec<u8>),
 }
 
@@ -26,6 +28,8 @@ impl ProtocolSpec {
             "ethernet" | "eth" => Some(ProtocolSpec::Ethernet(Default::default())),
             "ipv4" | "ip" => Some(ProtocolSpec::Ipv4(Default::default())),
             "tcp" => Some(ProtocolSpec::Tcp(Default::default())),
+            "udp" => Some(ProtocolSpec::Udp(Default::default())),
+            "icmp" => Some(ProtocolSpec::Icmp(Default::default())),
             "raw" | "payload" => Some(ProtocolSpec::Raw(Vec::new())),
             _ => None,
         }
@@ -37,6 +41,8 @@ impl ProtocolSpec {
             ProtocolSpec::Ethernet(_) => "ethernet",
             ProtocolSpec::Ipv4(_) => "ipv4",
             ProtocolSpec::Tcp(_) => "tcp",
+            ProtocolSpec::Udp(_) => "udp",
+            ProtocolSpec::Icmp(_) => "icmp",
             ProtocolSpec::Raw(_) => "raw",
         }
     }
@@ -59,7 +65,20 @@ pub fn assemble(stack: &[ProtocolSpec]) -> Result<PacketDocument, EngineError> {
             ProtocolSpec::Tcp(p) => {
                 let ip = ipv4_offset
                     .ok_or(EngineError::Assembly("TCP requires a preceding IPv4 layer"))?;
+                bytes[ip + 9] = 6; // IPv4 protocol = TCP
                 tcp::build(offset, ip, p)
+            }
+            ProtocolSpec::Udp(p) => {
+                let ip = ipv4_offset
+                    .ok_or(EngineError::Assembly("UDP requires a preceding IPv4 layer"))?;
+                bytes[ip + 9] = 17; // IPv4 protocol = UDP
+                udp::build(offset, ip, p)
+            }
+            ProtocolSpec::Icmp(p) => {
+                let ip = ipv4_offset
+                    .ok_or(EngineError::Assembly("ICMP requires a preceding IPv4 layer"))?;
+                bytes[ip + 9] = 1; // IPv4 protocol = ICMP
+                icmp::build(offset, p)
             }
             ProtocolSpec::Raw(data) => raw::build(offset, data),
         };

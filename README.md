@@ -16,7 +16,7 @@ block them.
 | Crate | Role |
 |-------|------|
 | `packet-core` | Byte-buffer-authoritative document model: `BitRange`, `Operation` IR, layers/fields, diagnostics, JSON. |
-| `protocol-engine` | Operation evaluator, dependency-ordered resolve, built-in protocols (Ethernet II, IPv4, TCP, raw). |
+| `protocol-engine` | Operation evaluator, dependency-ordered resolve, built-in protocols (Ethernet II, IPv4, TCP, UDP, ICMP, raw). |
 | `packet-cli` | `packet-foundry` CLI — assemble packets to JSON. |
 
 ### Quick start
