@@ -1,0 +1,9 @@
+{
+  "name": "Ethernet II",
+  "header_len": 14,
+  "fields": [
+    {"name": "DstMac", "offset_bits": 0, "width_bits": 48, "kind": "mac_addr"},
+    {"name": "SrcMac", "offset_bits": 48, "width_bits": 48, "kind": "mac_addr"},
+    {"name": "EtherType", "offset_bits": 96, "width_bits": 16, "kind": "uint", "default": [8, 0]}
+  ]
+}

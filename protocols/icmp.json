@@ -1,0 +1,12 @@
+{
+  "name": "ICMP",
+  "header_len": 8,
+  "fields": [
+    {"name": "Type", "offset_bits": 0, "width_bits": 8, "kind": "uint", "default": [8]},
+    {"name": "Code", "offset_bits": 8, "width_bits": 8, "kind": "uint"},
+    {"name": "Checksum", "offset_bits": 16, "width_bits": 16, "kind": "uint",
+     "derivation": {"Checksum": ["ToEnd"]}},
+    {"name": "Identifier", "offset_bits": 32, "width_bits": 16, "kind": "uint"},
+    {"name": "SequenceNumber", "offset_bits": 48, "width_bits": 16, "kind": "uint"}
+  ]
+}

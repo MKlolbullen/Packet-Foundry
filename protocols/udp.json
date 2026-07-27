@@ -1,0 +1,18 @@
+{
+  "name": "UDP",
+  "header_len": 8,
+  "fields": [
+    {"name": "SrcPort", "offset_bits": 0, "width_bits": 16, "kind": "uint"},
+    {"name": "DstPort", "offset_bits": 16, "width_bits": 16, "kind": "uint"},
+    {"name": "Length", "offset_bits": 32, "width_bits": 16, "kind": "uint",
+     "derivation": {"LengthToEnd": {"width": 2}}},
+    {"name": "Checksum", "offset_bits": 48, "width_bits": 16, "kind": "uint",
+     "derivation": {"Checksum": [
+       {"LayerField": ["IPv4", "SrcAddr"]},
+       {"LayerField": ["IPv4", "DstAddr"]},
+       {"Const": [0, 17]},
+       {"LengthToEnd": {"width": 2}},
+       "ToEnd"
+     ]}}
+  ]
+}

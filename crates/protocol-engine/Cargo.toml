@@ -10,6 +10,7 @@ rust-version.workspace = true
 packet-core = { path = "../packet-core" }
 thiserror = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

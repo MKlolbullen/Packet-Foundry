@@ -4,11 +4,15 @@
 //! assembler), tracks field dependencies to resolve derived fields in topological order, and
 //! provides the built-in protocol builders (Ethernet II, IPv4, TCP, raw payload).
 
+pub mod descriptor;
 mod eval;
 pub mod protocols;
 mod registry;
 mod resolve;
 
+pub use descriptor::{
+    DExpr, DescriptorError, FieldDescriptor, LayoutContext, ProtocolDescriptor, lower,
+};
 pub use eval::{EngineError, evaluate};
 pub use registry::{ProtocolSpec, assemble};
 pub use resolve::{resolve, validate};

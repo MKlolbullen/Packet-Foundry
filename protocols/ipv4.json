@@ -1,0 +1,19 @@
+{
+  "name": "IPv4",
+  "header_len": 20,
+  "fields": [
+    {"name": "Version", "offset_bits": 0, "width_bits": 4, "kind": "uint", "default": [4]},
+    {"name": "IHL", "offset_bits": 4, "width_bits": 4, "kind": "uint", "default": [5]},
+    {"name": "DSCP_ECN", "offset_bits": 8, "width_bits": 8, "kind": "uint"},
+    {"name": "TotalLength", "offset_bits": 16, "width_bits": 16, "kind": "uint",
+     "derivation": {"LengthToEnd": {"width": 2}}},
+    {"name": "Identification", "offset_bits": 32, "width_bits": 16, "kind": "uint"},
+    {"name": "FlagsFragment", "offset_bits": 48, "width_bits": 16, "kind": "flags", "default": [64, 0]},
+    {"name": "TTL", "offset_bits": 64, "width_bits": 8, "kind": "uint", "default": [64]},
+    {"name": "Protocol", "offset_bits": 72, "width_bits": 8, "kind": "uint", "default": [6]},
+    {"name": "HeaderChecksum", "offset_bits": 80, "width_bits": 16, "kind": "uint",
+     "derivation": {"Checksum": ["ThisLayer"]}},
+    {"name": "SrcAddr", "offset_bits": 96, "width_bits": 32, "kind": "ipv4_addr"},
+    {"name": "DstAddr", "offset_bits": 128, "width_bits": 32, "kind": "ipv4_addr"}
+  ]
+}

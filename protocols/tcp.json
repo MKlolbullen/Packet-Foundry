@@ -1,0 +1,22 @@
+{
+  "name": "TCP",
+  "header_len": 20,
+  "fields": [
+    {"name": "SrcPort", "offset_bits": 0, "width_bits": 16, "kind": "uint"},
+    {"name": "DstPort", "offset_bits": 16, "width_bits": 16, "kind": "uint"},
+    {"name": "SeqNum", "offset_bits": 32, "width_bits": 32, "kind": "uint"},
+    {"name": "AckNum", "offset_bits": 64, "width_bits": 32, "kind": "uint"},
+    {"name": "DataOffset", "offset_bits": 96, "width_bits": 4, "kind": "uint", "default": [5]},
+    {"name": "Flags", "offset_bits": 104, "width_bits": 8, "kind": "flags", "default": [2]},
+    {"name": "Window", "offset_bits": 112, "width_bits": 16, "kind": "uint", "default": [255, 255]},
+    {"name": "Checksum", "offset_bits": 128, "width_bits": 16, "kind": "uint",
+     "derivation": {"Checksum": [
+       {"LayerField": ["IPv4", "SrcAddr"]},
+       {"LayerField": ["IPv4", "DstAddr"]},
+       {"Const": [0, 6]},
+       {"LengthToEnd": {"width": 2}},
+       "ToEnd"
+     ]}},
+    {"name": "UrgentPtr", "offset_bits": 144, "width_bits": 16, "kind": "uint"}
+  ]
+}
