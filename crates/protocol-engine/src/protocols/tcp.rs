@@ -4,6 +4,7 @@
 //! dependency-ordered resolver.
 
 use packet_core::{BitRange, Field, FieldKind, Layer, Operation};
+use serde::{Deserialize, Serialize};
 
 /// Length of a TCP header without options, in bytes.
 pub const LEN: usize = 20;
@@ -18,7 +19,7 @@ pub mod flags {
 }
 
 /// Parameters for a TCP header. Data Offset is fixed at 5 (no options) in Phase 1.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TcpParams {
     pub src_port: u16,
     pub dst_port: u16,

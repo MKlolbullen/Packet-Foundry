@@ -1,12 +1,13 @@
 //! Ethernet II framing (14 bytes): destination MAC, source MAC, EtherType. No derived fields.
 
 use packet_core::{BitRange, Field, FieldKind, Layer};
+use serde::{Deserialize, Serialize};
 
 /// Length of an Ethernet II header in bytes.
 pub const LEN: usize = 14;
 
 /// Parameters for an Ethernet II header.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EthernetParams {
     pub dst_mac: [u8; 6],
     pub src_mac: [u8; 6],
