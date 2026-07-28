@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import BoxNode from "./BoxNode";
 import Viewport, { type ViewportHandle } from "./Viewport";
+import SplitPane from "./SplitPane";
 import {
   EVALUABLE_KINDS,
   RESERVED_KINDS,
@@ -50,7 +51,7 @@ function PaletteChip({ kind }: { kind: OpKind }) {
   );
 }
 
-export default function BoxEditor() {
+export default function BoxEditor({ active }: { active: boolean }) {
   const [root, setRoot] = useState<Operation>(STARTER_OP);
   const [bufferHex, setBufferHex] = useState(STARTER_BUFFER);
   const [result, setResult] = useState<string | null>(null);
@@ -117,112 +118,147 @@ export default function BoxEditor() {
     }
   }
 
-  return (
-    <div className="box-editor">
-      <aside className="palette">
-        <h2>Boxes</h2>
-        <p className="hint">Drag a box onto the canvas — onto a slot to fill it, or onto an existing box to replace it.</p>
-        <h3>Evaluable</h3>
-        <div className="palette-group">
-          {EVALUABLE_KINDS.map((k) => (
-            <PaletteChip kind={k} key={k} />
-          ))}
+  const canvasTop = (
+    <div className="canvas-top">
+      <div className="canvas-toolbar">
+        <h2>Canvas</h2>
+        <div className="toolbar-controls">
+          <button title="Zoom out" onClick={() => viewportRef.current?.zoomOut()}>
+            −
+          </button>
+          <span className="zoom-readout">{scalePct}%</span>
+          <button title="Zoom in" onClick={() => viewportRef.current?.zoomIn()}>
+            +
+          </button>
+          <button title="Reset view" onClick={() => viewportRef.current?.reset()}>
+            Reset
+          </button>
+          <button title="Fit to view" onClick={() => viewportRef.current?.fit()}>
+            Fit
+          </button>
+          <span className="toolbar-sep" />
+          <button title="Reset the canvas to an empty box" onClick={onClear}>
+            Clear
+          </button>
+          <button title="Copy this tree's JSON to the clipboard" onClick={onCopyJson}>
+            Copy JSON
+          </button>
+          <button title="Load a tree from pasted JSON" onClick={() => setImportOpen((v) => !v)}>
+            Import JSON
+          </button>
+          {copyFeedback && <span className="toolbar-feedback">{copyFeedback}</span>}
         </div>
-        <h3>Reserved (not yet evaluable)</h3>
-        <p className="hint">
-          Parsed &amp; serialized, but the Phase 1 evaluator rejects them — see{" "}
-          <code>Operation::is_reserved</code>.
-        </p>
-        <div className="palette-group">
-          {RESERVED_KINDS.map((k) => (
-            <PaletteChip kind={k} key={k} />
-          ))}
-        </div>
-        <h3>Presets</h3>
-        <div className="row wrap">
-          <button onClick={() => setRoot(STARTER_OP)}>Checksum example</button>
-          <button onClick={() => setRoot(LOOP_EXAMPLE_OP)}>Loop example</button>
-          <button onClick={onClear}>Empty</button>
-        </div>
-      </aside>
+      </div>
 
-      <section className="canvas">
-        <div className="canvas-toolbar">
-          <h2>Canvas</h2>
-          <div className="toolbar-controls">
-            <button title="Zoom out" onClick={() => viewportRef.current?.zoomOut()}>
-              −
-            </button>
-            <span className="zoom-readout">{scalePct}%</span>
-            <button title="Zoom in" onClick={() => viewportRef.current?.zoomIn()}>
-              +
-            </button>
-            <button title="Reset view" onClick={() => viewportRef.current?.reset()}>
-              Reset
-            </button>
-            <button title="Fit to view" onClick={() => viewportRef.current?.fit()}>
-              Fit
-            </button>
-            <span className="toolbar-sep" />
-            <button title="Reset the canvas to an empty box" onClick={onClear}>
-              Clear
-            </button>
-            <button title="Copy this tree's JSON to the clipboard" onClick={onCopyJson}>
-              Copy JSON
-            </button>
-            <button title="Load a tree from pasted JSON" onClick={() => setImportOpen((v) => !v)}>
-              Import JSON
-            </button>
-            {copyFeedback && <span className="toolbar-feedback">{copyFeedback}</span>}
-          </div>
-        </div>
-
-        {importOpen && (
-          <div className="import-bar">
-            <textarea
-              className="json-editor small"
-              value={importText}
-              onChange={(e) => setImportText(e.currentTarget.value)}
-              placeholder="Paste an Operation JSON tree…"
-              spellCheck={false}
-            />
-            <div className="row">
-              <button onClick={onImport}>Load</button>
-              <button onClick={() => setImportOpen(false)}>Cancel</button>
-            </div>
-            {importError && <p className="error">{importError}</p>}
-          </div>
-        )}
-
-        <p className="hint">Drag empty canvas to pan, scroll to zoom.</p>
-        <Viewport ref={viewportRef} className="canvas-tree" onTransformChange={(t) => setScalePct(Math.round(t.scale * 100))}>
-          <BoxNode
-            op={root}
-            path={[]}
-            onChange={onChange}
-            onInsert={onInsert}
-            onRemoveItem={onRemoveItem}
-            onMoveItem={onMoveItem}
-          />
-        </Viewport>
-
-        <div className="evaluate-bar">
-          <label className="param-label">scratch buffer (hex)</label>
-          <input
-            className="box-input hex-input"
-            value={bufferHex}
-            onChange={(e) => setBufferHex(e.currentTarget.value)}
+      {importOpen && (
+        <div className="import-bar">
+          <textarea
+            className="json-editor small"
+            value={importText}
+            onChange={(e) => setImportText(e.currentTarget.value)}
+            placeholder="Paste an Operation JSON tree…"
             spellCheck={false}
           />
-          <button onClick={onEvaluate}>Evaluate</button>
+          <div className="row">
+            <button onClick={onImport}>Load</button>
+            <button onClick={() => setImportOpen(false)}>Cancel</button>
+          </div>
+          {importError && <p className="error">{importError}</p>}
         </div>
-        {error && <p className="error">{error}</p>}
-        {result !== null && (
-          <p className="eval-result">
-            = <code>{result || "(empty)"}</code>
-          </p>
-        )}
-      </section>
+      )}
+
+      <p className="hint">Drag empty canvas to pan, scroll to zoom. Drag the bars below/beside the canvas to resize.</p>
+      <Viewport ref={viewportRef} onTransformChange={(t) => setScalePct(Math.round(t.scale * 100))}>
+        <BoxNode
+          op={root}
+          path={[]}
+          onChange={onChange}
+          onInsert={onInsert}
+          onRemoveItem={onRemoveItem}
+          onMoveItem={onMoveItem}
+        />
+      </Viewport>
+    </div>
+  );
+
+  const canvasBottom = (
+    <div className="canvas-bottom">
+      <div className="evaluate-bar">
+        <label className="param-label">scratch buffer (hex)</label>
+        <input
+          className="box-input hex-input"
+          value={bufferHex}
+          onChange={(e) => setBufferHex(e.currentTarget.value)}
+          spellCheck={false}
+        />
+        <button onClick={onEvaluate}>Evaluate</button>
+      </div>
+      {error && <p className="error">{error}</p>}
+      {result !== null && (
+        <p className="eval-result">
+          = <code>{result || "(empty)"}</code>
+        </p>
+      )}
+    </div>
+  );
+
+  const palette = (
+    <aside className="palette">
+      <h2>Boxes</h2>
+      <p className="hint">Drag a box onto the canvas — onto a slot to fill it, or onto an existing box to replace it.</p>
+      <h3>Evaluable</h3>
+      <div className="palette-group">
+        {EVALUABLE_KINDS.map((k) => (
+          <PaletteChip kind={k} key={k} />
+        ))}
+      </div>
+      <h3>Reserved (not yet evaluable)</h3>
+      <p className="hint">
+        Parsed &amp; serialized, but the Phase 1 evaluator rejects them — see{" "}
+        <code>Operation::is_reserved</code>.
+      </p>
+      <div className="palette-group">
+        {RESERVED_KINDS.map((k) => (
+          <PaletteChip kind={k} key={k} />
+        ))}
+      </div>
+      <h3>Presets</h3>
+      <div className="row wrap">
+        <button onClick={() => setRoot(STARTER_OP)}>Checksum example</button>
+        <button onClick={() => setRoot(LOOP_EXAMPLE_OP)}>Loop example</button>
+        <button onClick={onClear}>Empty</button>
+      </div>
+    </aside>
+  );
+
+  const canvas = (
+    <section className="canvas">
+      <SplitPane
+        direction="vertical"
+        className="canvas-split"
+        defaultSize={420}
+        minSize={200}
+        minSecondSize={110}
+        storageKey="split.canvas-evaluate"
+        active={active}
+        first={canvasTop}
+        second={canvasBottom}
+      />
+    </section>
+  );
+
+  return (
+    <div className="box-editor">
+      <SplitPane
+        direction="horizontal"
+        defaultSize={260}
+        minSize={200}
+        minSecondSize={420}
+        storageKey="split.palette-canvas"
+        active={active}
+        first={palette}
+        second={canvas}
+      />
     </div>
   );
 }

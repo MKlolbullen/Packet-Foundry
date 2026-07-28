@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Diagnostic, PacketDocument, ProtocolSpec } from "./types";
 import { formatFieldValue, hexToBytes, locationString } from "./packet";
 import BoxEditor from "./BoxEditor";
+import SplitPane from "./SplitPane";
 import { type ThemeSetting, applyTheme, loadThemeSetting, saveThemeSetting } from "./theme";
 import "./App.css";
 
@@ -43,6 +44,9 @@ function ThemeToggle() {
 
 function PacketTree({ doc }: { doc: PacketDocument }) {
   const bytes = hexToBytes(doc.buffer);
+  if (bytes === null) {
+    return <p className="error">Malformed buffer: `{doc.buffer}` is not valid hex.</p>;
+  }
   return (
     <div className="tree">
       <p className="tree-summary">
@@ -92,7 +96,7 @@ function Diagnostics({ diagnostics }: { diagnostics: Diagnostic[] }) {
   );
 }
 
-function BuildAndInspect() {
+function BuildAndInspect({ active }: { active: boolean }) {
   const [stackText, setStackText] = useState("");
   const [doc, setDoc] = useState<PacketDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -144,45 +148,54 @@ function BuildAndInspect() {
   }
 
   return (
-    <div className="panes">
-      <section className="pane">
-        <h2>Build</h2>
-        <p className="hint">Edit the protocol stack (an array of `ProtocolSpec`) and assemble it.</p>
-        <textarea
-          className="json-editor"
-          value={stackText}
-          onChange={(e) => setStackText(e.currentTarget.value)}
-          spellCheck={false}
-        />
-        <div className="row">
-          <button onClick={onAssembleClick}>Assemble</button>
-          <button onClick={sendToInspector} disabled={!doc}>
-            Send to Inspect →
-          </button>
-        </div>
-        {error && <p className="error">{error}</p>}
-        {doc && <PacketTree doc={doc} />}
-      </section>
-
-      <section className="pane">
-        <h2>Inspect</h2>
-        <p className="hint">Paste a packet document's JSON and load it — bytes never change, only diagnostics.</p>
-        <textarea
-          className="json-editor"
-          value={inspectText}
-          onChange={(e) => setInspectText(e.currentTarget.value)}
-          placeholder="Paste packet document JSON here…"
-          spellCheck={false}
-        />
-        <div className="row">
-          <button onClick={onInspectClick} disabled={!inspectText}>
-            Inspect
-          </button>
-        </div>
-        {inspectError && <p className="error">{inspectError}</p>}
-        {inspectDoc && <PacketTree doc={inspectDoc} />}
-      </section>
-    </div>
+    <SplitPane
+      direction="horizontal"
+      defaultSize={520}
+      minSize={260}
+      minSecondSize={260}
+      storageKey="split.build-inspect"
+      active={active}
+      first={
+        <section className="pane">
+          <h2>Build</h2>
+          <p className="hint">Edit the protocol stack (an array of `ProtocolSpec`) and assemble it.</p>
+          <textarea
+            className="json-editor"
+            value={stackText}
+            onChange={(e) => setStackText(e.currentTarget.value)}
+            spellCheck={false}
+          />
+          <div className="row">
+            <button onClick={onAssembleClick}>Assemble</button>
+            <button onClick={sendToInspector} disabled={!doc}>
+              Send to Inspect →
+            </button>
+          </div>
+          {error && <p className="error">{error}</p>}
+          {doc && <PacketTree doc={doc} />}
+        </section>
+      }
+      second={
+        <section className="pane">
+          <h2>Inspect</h2>
+          <p className="hint">Paste a packet document's JSON and load it — bytes never change, only diagnostics.</p>
+          <textarea
+            className="json-editor"
+            value={inspectText}
+            onChange={(e) => setInspectText(e.currentTarget.value)}
+            placeholder="Paste packet document JSON here…"
+            spellCheck={false}
+          />
+          <div className="row">
+            <button onClick={onInspectClick} disabled={!inspectText}>
+              Inspect
+            </button>
+          </div>
+          {inspectError && <p className="error">{inspectError}</p>}
+          {inspectDoc && <PacketTree doc={inspectDoc} />}
+        </section>
+      }
+    />
   );
 }
 
@@ -216,10 +229,10 @@ function App() {
       {/* Both tabs stay mounted so switching back and forth never loses a draft (the assembled
           stack, an in-progress box tree, pan/zoom position, ...). */}
       <div style={{ display: tab === "assemble" ? "block" : "none" }}>
-        <BuildAndInspect />
+        <BuildAndInspect active={tab === "assemble"} />
       </div>
       <div style={{ display: tab === "boxes" ? "block" : "none" }}>
-        <BoxEditor />
+        <BoxEditor active={tab === "boxes"} />
       </div>
     </main>
   );

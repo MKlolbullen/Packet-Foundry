@@ -79,15 +79,9 @@ h1 {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
-.panes {
-  display: flex;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-
 .pane {
-  flex: 1 1 480px;
-  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
   text-align: left;
   background: #ffffff;
   border-radius: 10px;
@@ -265,23 +259,103 @@ button:disabled {
   font-weight: 700;
 }
 
+/* ---- resizable split panes ---- */
+/* Drag the divider to resize; double-click it to reset. Used for Build|Inspect and the box
+   editor's palette|canvas and canvas|evaluate splits — the adjustable, multi-pane layout a
+   packet-analysis tool (Wireshark, an IDE, a disassembler) is expected to have. */
+
+.split-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split-pane.split-horizontal {
+  flex-direction: row;
+}
+
+.split-pane.split-vertical {
+  flex-direction: column;
+}
+
+.split-pane-first {
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split-pane-second {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split-pane-divider {
+  flex: 0 0 10px;
+  position: relative;
+  background: transparent;
+}
+
+.split-horizontal > .split-pane-divider {
+  cursor: col-resize;
+}
+
+.split-vertical > .split-pane-divider {
+  cursor: row-resize;
+}
+
+.split-pane-divider::after {
+  content: "";
+  position: absolute;
+  background: #d9d9d9;
+  border-radius: 3px;
+  transition: background-color 0.15s;
+}
+
+.split-horizontal > .split-pane-divider::after {
+  left: 4px;
+  right: 4px;
+  top: 0;
+  bottom: 0;
+}
+
+.split-vertical > .split-pane-divider::after {
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  right: 0;
+}
+
+.split-pane-divider:hover::after,
+.split-pane.dragging > .split-pane-divider::after {
+  background: #396cd8;
+}
+
 /* ---- box editor ---- */
 
+/* Anchors a definite height at the top of the box editor so the nested splits below (palette |
+   canvas, then canvas-top | canvas-bottom) can each resolve `height: 100%` / `flex: 1 1 auto`
+   down the chain — percentage/flex heights need a definite height *somewhere* above them, and an
+   auto-height ancestor breaks that for everyone below it. */
 .box-editor {
-  display: flex;
-  gap: 1.5rem;
-  align-items: flex-start;
+  height: 75vh;
+  min-height: 560px;
+  box-sizing: border-box;
   text-align: left;
 }
 
+.box-editor > .split-pane {
+  height: 100%;
+}
+
 .palette {
-  flex: 0 0 240px;
+  height: 100%;
+  box-sizing: border-box;
   background: #ffffff;
   border-radius: 10px;
   padding: 1rem 1.1rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  position: sticky;
-  top: 1rem;
+  overflow-y: auto;
 }
 
 .palette h2 {
@@ -320,17 +394,47 @@ button:disabled {
 }
 
 .canvas {
-  flex: 1 1 auto;
+  height: 100%;
   min-width: 0;
+  box-sizing: border-box;
   background: #ffffff;
   border-radius: 10px;
   padding: 1rem 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
 }
 
 .canvas h2 {
+  flex: 0 0 auto;
   margin-top: 0;
   margin-bottom: 0;
+}
+
+.canvas-split {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 0.6rem;
+}
+
+.canvas-top {
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.canvas-top > .viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.canvas-bottom {
+  height: 100%;
+  box-sizing: border-box;
+  padding-top: 0.6rem;
+  overflow-y: auto;
 }
 
 .canvas-toolbar {
@@ -393,8 +497,7 @@ button:disabled {
   overflow: hidden;
   border: 1px solid #e2e2e2;
   border-radius: 8px;
-  height: 55vh;
-  min-height: 380px;
+  min-height: 160px;
   cursor: grab;
   background-color: #fafafa;
   background-image: radial-gradient(circle, #d7d7d7 1px, transparent 1px);
@@ -752,4 +855,13 @@ button:disabled {
 :root[data-theme="dark"] .theme-option.active {
   background: #3a3a3a;
   color: #ffffff;
+}
+
+:root[data-theme="dark"] .split-pane-divider::after {
+  background: #444;
+}
+
+:root[data-theme="dark"] .split-pane-divider:hover::after,
+:root[data-theme="dark"] .split-pane.dragging > .split-pane-divider::after {
+  background: #5b8def;
 }

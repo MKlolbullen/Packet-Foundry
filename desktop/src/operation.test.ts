@@ -3,12 +3,10 @@ import {
   EVALUABLE_KINDS,
   type Operation,
   RESERVED_KINDS,
-  bytesToHex,
   childLabels,
   defaultOperation,
   getAtPath,
   getChildren,
-  hexToBytesArray,
   insertAtPath,
   isReserved,
   moveListItem,
@@ -159,21 +157,5 @@ describe("moveListItem", () => {
   it("is a no-op past either boundary", () => {
     expect(moveListItem(list, [], 0, -1)).toEqual(list);
     expect(moveListItem(list, [], 2, 1)).toEqual(list);
-  });
-});
-
-describe("hex helpers", () => {
-  it("round-trips bytes through hex", () => {
-    expect(bytesToHex([0xde, 0xad, 0xbe, 0xef])).toBe("deadbeef");
-    expect(hexToBytesArray("deadbeef")).toEqual([0xde, 0xad, 0xbe, 0xef]);
-  });
-
-  it("is case-insensitive and tolerates whitespace", () => {
-    expect(hexToBytesArray(" DE AD be EF ")).toEqual([0xde, 0xad, 0xbe, 0xef]);
-  });
-
-  it("rejects odd-length or non-hex input", () => {
-    expect(hexToBytesArray("abc")).toEqual([]);
-    expect(hexToBytesArray("zz")).toEqual([]);
   });
 });

@@ -43,13 +43,14 @@ See [`docs/phase-1-design.md`](docs/phase-1-design.md) for the engine design.
 ## Screenshots
 
 **Build & Inspect** — assemble a protocol stack from JSON, inspect the resolved layer/field tree
-and diagnostics:
+and diagnostics. The Build/Inspect split (and every other pane split in the app) is a draggable
+divider — drag it to resize, double-click to reset, size persists across sessions:
 
 ![Build & Inspect tab](docs/screenshots/build-inspect.png)
 
 **Box Editor** — drag `Operation` boxes onto a pannable, zoomable canvas (drag empty space to
 pan, scroll to zoom, or use the toolbar's zoom/fit controls); this is the real IPv4 header
-checksum expression, "Fit" to frame it after evaluating it against the known-good test vector:
+checksum expression, evaluated against the known-good test vector:
 
 ![Box Editor tab](docs/screenshots/box-editor.png)
 

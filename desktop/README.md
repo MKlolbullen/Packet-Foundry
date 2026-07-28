@@ -15,7 +15,8 @@ Two tabs:
   (`src/operation.ts`) have a unit suite: `npm test`.
 
 Both tabs stay mounted when you switch between them, so neither loses its draft. Theme
-(System/Light/Dark) is in the header, top right.
+(System/Light/Dark) is in the header, top right. Every pane boundary is a resizable, persisted
+split (`src/SplitPane.tsx`) — drag a divider, double-click to reset.
 
 ## Develop
 

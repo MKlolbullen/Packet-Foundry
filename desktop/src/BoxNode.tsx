@@ -3,15 +3,14 @@ import type { DragEvent, ReactNode } from "react";
 import {
   type Operation,
   type OpKind,
-  bytesToHex,
   childLabels,
   controlFlowLayout,
   defaultOperation,
   getChildren,
-  hexToBytesArray,
   isReserved,
   opKind,
 } from "./operation";
+import { bytesToHex, hexToBytesArray } from "./hex";
 import { PALETTE_KIND_MIME, SUBTREE_JSON_MIME } from "./dnd";
 
 export interface BoxNodeProps {

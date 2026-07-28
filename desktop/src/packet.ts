@@ -3,14 +3,7 @@
 // this just decodes the hex buffer the engine already resolved for display.
 import type { Field } from "./types";
 
-export function hexToBytes(hex: string): Uint8Array {
-  const clean = hex.trim();
-  const out = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16);
-  }
-  return out;
-}
+export { hexToBytes } from "./hex";
 
 /** Read `lenBits` bits starting at `startBit` as an unsigned integer, MSB-first. */
 export function readUintBits(bytes: Uint8Array, startBit: number, lenBits: number): bigint | null {
