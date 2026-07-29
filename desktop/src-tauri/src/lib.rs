@@ -39,6 +39,7 @@ fn create_packet(protocols: Vec<ProtocolSpec>) -> Result<PacketDocument, String>
 #[tauri::command]
 fn inspect_packet(document_json: String) -> Result<PacketDocument, String> {
     let mut doc = PacketDocument::from_json(&document_json).map_err(|e| e.to_string())?;
+    doc.assign_missing_node_ids();
     doc.diagnostics = validate(&doc);
     Ok(doc)
 }

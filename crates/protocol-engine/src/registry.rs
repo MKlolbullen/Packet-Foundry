@@ -90,6 +90,7 @@ pub fn assemble(stack: &[ProtocolSpec]) -> Result<PacketDocument, EngineError> {
 
     let mut doc = PacketDocument::with_buffer(PacketBuffer::from_bytes(bytes));
     doc.layers = layers;
+    doc.assign_missing_node_ids();
     resolve(&mut doc)?;
     Ok(doc)
 }

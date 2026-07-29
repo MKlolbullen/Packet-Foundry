@@ -8,7 +8,7 @@ export interface ViewportHandle {
   fit: () => void;
 }
 
-interface Transform {
+export interface Transform {
   x: number;
   y: number;
   scale: number;

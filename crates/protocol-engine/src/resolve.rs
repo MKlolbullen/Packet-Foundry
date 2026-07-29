@@ -60,9 +60,7 @@ pub fn validate(doc: &PacketDocument) -> Vec<Diagnostic> {
                 ));
             }
             for other in &layer.fields[i + 1..] {
-                let a = (field.range.start_bit, end);
-                let b = (other.range.start_bit, other.range.start_bit + other.range.len_bits);
-                if a.0 < b.1 && b.0 < a.1 {
+                if field.range.overlaps(other.range) {
                     diags.push(Diagnostic::warning(
                         "field.overlap",
                         format!("fields `{}` and `{}` overlap", field.name, other.name),

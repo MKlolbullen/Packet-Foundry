@@ -22,5 +22,5 @@ pub use buffer::PacketBuffer;
 pub use diagnostics::{Diagnostic, Severity};
 pub use document::{PacketDocument, SCHEMA_VERSION};
 pub use history::{Edit, EditHistory};
-pub use node::{Field, FieldKind, Layer};
+pub use node::{Field, FieldKind, Layer, NodeId};
 pub use operation::Operation;

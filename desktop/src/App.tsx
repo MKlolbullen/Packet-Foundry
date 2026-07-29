@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import type { Diagnostic, PacketDocument, ProtocolSpec } from "./types";
-import { formatFieldValue, hexToBytes, locationString } from "./packet";
 import BoxEditor from "./BoxEditor";
 import Assistant from "./Assistant";
 import SettingsModal from "./SettingsModal";
-import SplitPane from "./SplitPane";
+import Workspace from "./workspace/Workspace";
 import { type ThemeSetting, applyTheme, loadThemeSetting, saveThemeSetting } from "./theme";
 import "./App.css";
 
@@ -41,163 +38,6 @@ function ThemeToggle() {
         </button>
       ))}
     </div>
-  );
-}
-
-function PacketTree({ doc }: { doc: PacketDocument }) {
-  const bytes = hexToBytes(doc.buffer);
-  if (bytes === null) {
-    return <p className="error">Malformed buffer: `{doc.buffer}` is not valid hex.</p>;
-  }
-  return (
-    <div className="tree">
-      <p className="tree-summary">
-        {bytes.length} bytes · {doc.layers.length} layer{doc.layers.length === 1 ? "" : "s"}
-      </p>
-      {doc.layers.map((layer, i) => (
-        <div className="layer" key={`${layer.name}-${i}`}>
-          <div className="layer-name">
-            {layer.name} <span className="loc">{locationString(layer.range)}</span>
-          </div>
-          <table className="fields">
-            <tbody>
-              {layer.fields.map((field) => (
-                <tr key={field.name}>
-                  <td className="field-name">{field.name}</td>
-                  <td className="loc">{locationString(field.range)}</td>
-                  <td className="field-value">{formatFieldValue(bytes, field)}</td>
-                  <td className="field-marker">
-                    {field.override_bytes ? "pinned" : field.derivation ? "derived" : ""}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
-      <Diagnostics diagnostics={doc.diagnostics} />
-    </div>
-  );
-}
-
-function Diagnostics({ diagnostics }: { diagnostics: Diagnostic[] }) {
-  if (diagnostics.length === 0) {
-    return <p className="diagnostics-none">Diagnostics: none</p>;
-  }
-  return (
-    <div className="diagnostics">
-      <p>Diagnostics ({diagnostics.length}):</p>
-      <ul>
-        {diagnostics.map((d, i) => (
-          <li key={i} className={`sev-${d.severity}`}>
-            <span className="sev-badge">{d.severity}</span> {d.code}: {d.message}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function BuildAndInspect({ active }: { active: boolean }) {
-  const [stackText, setStackText] = useState("");
-  const [doc, setDoc] = useState<PacketDocument | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const [inspectText, setInspectText] = useState("");
-  const [inspectDoc, setInspectDoc] = useState<PacketDocument | null>(null);
-  const [inspectError, setInspectError] = useState<string | null>(null);
-
-  async function assemble(protocols: ProtocolSpec[]) {
-    try {
-      const built = await invoke<PacketDocument>("create_packet", { protocols });
-      setDoc(built);
-      setError(null);
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-
-  useEffect(() => {
-    (async () => {
-      const stack = await invoke<ProtocolSpec[]>("default_stack");
-      setStackText(JSON.stringify(stack, null, 2));
-      await assemble(stack);
-    })();
-  }, []);
-
-  async function onAssembleClick() {
-    try {
-      const protocols: ProtocolSpec[] = JSON.parse(stackText);
-      await assemble(protocols);
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-
-  async function onInspectClick() {
-    try {
-      const loaded = await invoke<PacketDocument>("inspect_packet", { documentJson: inspectText });
-      setInspectDoc(loaded);
-      setInspectError(null);
-    } catch (e) {
-      setInspectError(String(e));
-    }
-  }
-
-  function sendToInspector() {
-    if (!doc) return;
-    setInspectText(JSON.stringify(doc, null, 2));
-  }
-
-  return (
-    <SplitPane
-      direction="horizontal"
-      defaultSize={520}
-      minSize={260}
-      minSecondSize={260}
-      storageKey="split.build-inspect"
-      active={active}
-      first={
-        <section className="pane">
-          <h2>Build</h2>
-          <p className="hint">Edit the protocol stack (an array of `ProtocolSpec`) and assemble it.</p>
-          <textarea
-            className="json-editor"
-            value={stackText}
-            onChange={(e) => setStackText(e.currentTarget.value)}
-            spellCheck={false}
-          />
-          <div className="row">
-            <button onClick={onAssembleClick}>Assemble</button>
-            <button onClick={sendToInspector} disabled={!doc}>
-              Send to Inspect →
-            </button>
-          </div>
-          {error && <p className="error">{error}</p>}
-          {doc && <PacketTree doc={doc} />}
-        </section>
-      }
-      second={
-        <section className="pane">
-          <h2>Inspect</h2>
-          <p className="hint">Paste a packet document's JSON and load it — bytes never change, only diagnostics.</p>
-          <textarea
-            className="json-editor"
-            value={inspectText}
-            onChange={(e) => setInspectText(e.currentTarget.value)}
-            placeholder="Paste packet document JSON here…"
-            spellCheck={false}
-          />
-          <div className="row">
-            <button onClick={onInspectClick} disabled={!inspectText}>
-              Inspect
-            </button>
-          </div>
-          {inspectError && <p className="error">{inspectError}</p>}
-          {inspectDoc && <PacketTree doc={inspectDoc} />}
-        </section>
-      }
-    />
   );
 }
 
@@ -244,7 +84,7 @@ function App() {
       {/* All tabs stay mounted so switching back and forth never loses a draft (the assembled
           stack, an in-progress box tree, pan/zoom position, a chat transcript, ...). */}
       <div style={{ display: tab === "assemble" ? "block" : "none" }}>
-        <BuildAndInspect active={tab === "assemble"} />
+        <Workspace active={tab === "assemble"} />
       </div>
       <div style={{ display: tab === "boxes" ? "block" : "none" }}>
         <BoxEditor active={tab === "boxes"} />
