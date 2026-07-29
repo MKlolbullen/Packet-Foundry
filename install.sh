@@ -148,6 +148,23 @@ if [ "$NEED_NODE" = 1 ]; then
       fi
       ;;
   esac
+
+  # Don't trust that the package manager actually delivered >= 20 — distro repos (and an
+  # already-configured NodeSource for a different major) can still ship an older Node. Re-check
+  # and stop rather than let the frontend build fail later with a confusing error.
+  if [ "$DRY" = 0 ]; then
+    if ! command -v node >/dev/null 2>&1; then
+      note "Node.js still isn't on PATH after the install step — install it manually (https://nodejs.org, >= 20) and re-run"
+      exit 1
+    fi
+    NODE_MAJOR="$(node --version | sed 's/^v\([0-9]*\).*/\1/')"
+    if [ "$NODE_MAJOR" -lt 20 ]; then
+      note "installed Node.js $(node --version) is older than 20 — your package manager's repo ships an outdated Node"
+      note "install Node.js >= 20 manually (https://nodejs.org) or via nvm/asdf, then re-run"
+      exit 1
+    fi
+    ok "node $(node --version) installed"
+  fi
 fi
 
 # ---------------------------------------------------------------------- build
