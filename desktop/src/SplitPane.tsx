@@ -81,6 +81,7 @@ export default function SplitPane({
     const el = containerRef.current;
     if (!el || !active) return;
     setSize((s) => clamp(s));
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
       setSize((s) => clamp(s));
     });
