@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Diagnostic, PacketDocument, ProtocolSpec } from "./types";
 import { formatFieldValue, hexToBytes, locationString } from "./packet";
 import BoxEditor from "./BoxEditor";
+import Assistant from "./Assistant";
+import SettingsModal from "./SettingsModal";
 import SplitPane from "./SplitPane";
 import { type ThemeSetting, applyTheme, loadThemeSetting, saveThemeSetting } from "./theme";
 import "./App.css";
@@ -199,16 +201,26 @@ function BuildAndInspect({ active }: { active: boolean }) {
   );
 }
 
-type Tab = "assemble" | "boxes";
+type Tab = "assemble" | "boxes" | "assistant";
 
 function App() {
   const [tab, setTab] = useState<Tab>("assemble");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <main className="container">
       <header>
         <div className="header-bar">
-          <div className="header-spacer" />
+          <div className="header-spacer">
+            <button
+              className="settings-button"
+              onClick={() => setSettingsOpen(true)}
+              title="LLM settings"
+              aria-label="LLM settings"
+            >
+              ⚙
+            </button>
+          </div>
           <div className="header-titles">
             <h1>Packet Foundry</h1>
             <p className="tagline">A bidirectional, non-lossy assembler for wire formats.</p>
@@ -224,16 +236,24 @@ function App() {
         <button className={tab === "boxes" ? "tab active" : "tab"} onClick={() => setTab("boxes")}>
           Box Editor
         </button>
+        <button className={tab === "assistant" ? "tab active" : "tab"} onClick={() => setTab("assistant")}>
+          Assistant
+        </button>
       </nav>
 
-      {/* Both tabs stay mounted so switching back and forth never loses a draft (the assembled
-          stack, an in-progress box tree, pan/zoom position, ...). */}
+      {/* All tabs stay mounted so switching back and forth never loses a draft (the assembled
+          stack, an in-progress box tree, pan/zoom position, a chat transcript, ...). */}
       <div style={{ display: tab === "assemble" ? "block" : "none" }}>
         <BuildAndInspect active={tab === "assemble"} />
       </div>
       <div style={{ display: tab === "boxes" ? "block" : "none" }}>
         <BoxEditor active={tab === "boxes"} />
       </div>
+      <div style={{ display: tab === "assistant" ? "block" : "none" }}>
+        <Assistant />
+      </div>
+
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </main>
   );
 }

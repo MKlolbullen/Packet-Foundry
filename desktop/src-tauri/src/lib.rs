@@ -2,6 +2,8 @@
 //! `packet-core` / `protocol-engine` crates. No packet logic lives here; every command just
 //! forwards to the engine and reports its `Result` back to the frontend.
 
+mod llm;
+
 use packet_core::{Operation, PacketBuffer, PacketDocument};
 use protocol_engine::{ProtocolSpec, assemble, evaluate, validate};
 
@@ -52,6 +54,37 @@ fn evaluate_operation(op: Operation, buffer_hex: String) -> Result<String, Strin
     evaluate(&op, &buffer).map(|out| hex::encode(out)).map_err(|e| e.to_string())
 }
 
+/// Load the persisted LLM provider settings (API key included) for the settings panel to
+/// pre-fill.
+#[tauri::command]
+async fn get_llm_settings(app: tauri::AppHandle) -> Result<llm::LlmSettings, String> {
+    llm::settings::load(&app).map_err(|e| e.to_string())
+}
+
+/// Persist LLM provider settings (provider, API key, model, base URL).
+#[tauri::command]
+async fn save_llm_settings(app: tauri::AppHandle, settings: llm::LlmSettings) -> Result<(), String> {
+    llm::settings::save(&app, &settings).map_err(|e| e.to_string())
+}
+
+/// Send a chat conversation to whichever provider is configured — the Assistant tab's send
+/// action.
+#[tauri::command]
+async fn llm_chat(app: tauri::AppHandle, messages: Vec<llm::ChatMessage>) -> Result<String, String> {
+    let settings = llm::settings::load(&app).map_err(|e| e.to_string())?;
+    llm::chat(&settings, &messages).await.map_err(|e| e.to_string())
+}
+
+/// Ask the configured provider to turn a plain-language description into an `Operation` tree —
+/// the box editor's "Generate" action. The reply is deserialized straight into `Operation`, so a
+/// model that doesn't produce a value the engine actually understands surfaces as an error here
+/// rather than a box tree that silently doesn't work.
+#[tauri::command]
+async fn llm_generate_operation(app: tauri::AppHandle, description: String) -> Result<Operation, String> {
+    let settings = llm::settings::load(&app).map_err(|e| e.to_string())?;
+    llm::generate_operation(&settings, &description).await.map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -60,7 +93,11 @@ pub fn run() {
             default_stack,
             create_packet,
             inspect_packet,
-            evaluate_operation
+            evaluate_operation,
+            get_llm_settings,
+            save_llm_settings,
+            llm_chat,
+            llm_generate_operation
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -14,6 +14,7 @@ import {
   removeAtPath,
   setAtPath,
 } from "./operation";
+import LlmGenerate from "./LlmGenerate";
 import { PALETTE_KIND_MIME } from "./dnd";
 
 // The known-good IPv4 header vector from protocol-engine's eval tests (checksum field zeroed) —
@@ -228,6 +229,12 @@ export default function BoxEditor({ active }: { active: boolean }) {
         <button onClick={() => setRoot(LOOP_EXAMPLE_OP)}>Loop example</button>
         <button onClick={onClear}>Empty</button>
       </div>
+      <h3>Generate with AI</h3>
+      <p className="hint">
+        Describe the box tree you want in plain language — uses the provider configured in
+        Settings (gear icon, top left). Replaces the whole canvas on success.
+      </p>
+      <LlmGenerate onGenerated={setRoot} />
     </aside>
   );
 
