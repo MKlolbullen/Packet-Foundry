@@ -248,17 +248,11 @@ export function defaultOperation(kind: OpKind): Operation {
       return { If: { cond: { Const: [0] }, then_branch: { Const: [0] }, else_branch: { Const: [0] } } };
     case "Call":
       return { Call: { name: "" } };
+    default: {
+      // Exhaustiveness guard: if OpKind gains a variant without a case above, this assignment
+      // fails to compile instead of silently falling through at runtime.
+      const unhandled: never = kind;
+      throw new Error(`defaultOperation: unhandled kind ${unhandled}`);
+    }
   }
-}
-
-export function bytesToHex(bytes: number[]): string {
-  return bytes.map((b) => (b & 0xff).toString(16).padStart(2, "0")).join("");
-}
-
-export function hexToBytesArray(hex: string): number[] {
-  const clean = hex.trim().replace(/\s+/g, "");
-  if (clean.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(clean)) return [];
-  const out: number[] = [];
-  for (let i = 0; i < clean.length; i += 2) out.push(parseInt(clean.substring(i, i + 2), 16));
-  return out;
 }

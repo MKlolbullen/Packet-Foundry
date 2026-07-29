@@ -152,6 +152,16 @@ lost drafts):
     `localStorage` (`theme.ts`).
   - Screenshots: [`../README.md#screenshots`](../README.md#screenshots).
 
+Every pane boundary — Build|Inspect, palette|canvas, canvas|evaluate-bar — is a resizable split
+(`SplitPane.tsx`): drag the divider, double-click to reset, size persists per-split to
+`localStorage`. Its trickiest bug (worth documenting since the pattern will recur): because both
+tabs stay mounted, a split whose tab starts inactive first mounts under `display: none`, where
+`clientWidth`/`clientHeight` always read 0 — a one-shot or `requestAnimationFrame`-deferred
+mount measurement still reads 0 there and clamps the size down to its floor with nothing left to
+correct it, since nothing ever "resizes" a `display: none` box. The fix is an explicit `active`
+prop (wired from the tab state) that gates the size-clamping effect and re-runs it the moment the
+tab actually becomes visible, rather than guessing at timing.
+
 Not yet done: true freeform *box* positioning (children still auto-lay-out under their parent —
 it's the viewport that's freeform, not individual box placement), and connecting a box back to a
 document field's derivation (pin/override from the GUI, editing a shipped protocol's fields).
