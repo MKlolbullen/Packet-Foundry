@@ -108,7 +108,9 @@ export function describeTarget(doc: PacketDocument, target: FocusTarget): string
   }
 }
 
-function parseOwnerId(ownerId: string | undefined): { layerId: string; fieldId: string } | null {
+/** Parse a byte/bit target's `ownerId` (`` `${layerId}:${fieldId}` ``) back into its parts —
+ * the one canonical parser of that encoding (range-index's field lookup reuses it too). */
+export function parseOwnerId(ownerId: string | undefined): { layerId: string; fieldId: string } | null {
   if (!ownerId) return null;
   const i = ownerId.lastIndexOf(":");
   if (i < 0) return null;

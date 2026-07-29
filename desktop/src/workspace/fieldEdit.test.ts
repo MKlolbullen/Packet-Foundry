@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   canEditSubByte,
+  canFlipBit,
+  flipBitInField,
   hasStructuredEditor,
   parseStructuredValue,
   structuredDraftFor,
@@ -140,5 +142,52 @@ describe("sub-byte fields", () => {
     const field: Field = { id: 2, name: "Version", range: { start_bit: 0, len_bits: 4 }, kind: "uint" };
     const doc = docWithField("45", field);
     expect(structuredDraftFor(doc, field)).toBe("4");
+  });
+});
+
+describe("flipBitInField / canFlipBit", () => {
+  it("flips the MSB and LSB of an aligned field", () => {
+    const field: Field = { id: 2, name: "TTL", range: { start_bit: 8, len_bits: 8 }, kind: "uint" };
+    const doc = docWithField("0040ff", field);
+    expect(flipBitInField(doc, field, 8)).toEqual(new Uint8Array([0xc0]));
+    expect(flipBitInField(doc, field, 15)).toEqual(new Uint8Array([0x41]));
+  });
+
+  it("flips within an unaligned nibble, packed right-aligned", () => {
+    const field: Field = { id: 2, name: "Version", range: { start_bit: 0, len_bits: 4 }, kind: "uint" };
+    const doc = docWithField("45", field);
+    // Version is 4 (0100); flipping its second bit (abs bit 1) gives 0 (0000).
+    expect(flipBitInField(doc, field, 1)).toEqual(new Uint8Array([0x00]));
+    // Flipping the LSB (abs bit 3) gives 5.
+    expect(flipBitInField(doc, field, 3)).toEqual(new Uint8Array([0x05]));
+  });
+
+  it("flipping twice round-trips to the original packed value", () => {
+    const field: Field = { id: 2, name: "IHL", range: { start_bit: 4, len_bits: 4 }, kind: "uint" };
+    const doc = docWithField("45", field);
+    const once = flipBitInField(doc, field, 6)!;
+    const flippedDoc = { ...doc, buffer: "47" }; // 0100 0111: bit 6 flipped
+    expect(flipBitInField(flippedDoc, field, 6)).toEqual(new Uint8Array([0x05]));
+    expect(once).toEqual(new Uint8Array([0x07]));
+  });
+
+  it("a bit outside the field returns null", () => {
+    const field: Field = { id: 2, name: "Version", range: { start_bit: 0, len_bits: 4 }, kind: "uint" };
+    const doc = docWithField("45", field);
+    expect(flipBitInField(doc, field, 4)).toBeNull();
+    expect(flipBitInField(doc, field, -1 as number)).toBeNull();
+  });
+
+  it("flipping the MSB of an all-ones unaligned value stays in range", () => {
+    const field: Field = { id: 2, name: "Nib", range: { start_bit: 0, len_bits: 4 }, kind: "uint" };
+    const doc = docWithField("f5", field);
+    expect(flipBitInField(doc, field, 0)).toEqual(new Uint8Array([0x07]));
+  });
+
+  it("canFlipBit: aligned any width, unaligned only within 64 bits", () => {
+    expect(canFlipBit({ start_bit: 0, len_bits: 800 })).toBe(true);
+    expect(canFlipBit({ start_bit: 4, len_bits: 13 })).toBe(true);
+    expect(canFlipBit({ start_bit: 4, len_bits: 64 })).toBe(true);
+    expect(canFlipBit({ start_bit: 4, len_bits: 65 })).toBe(false);
   });
 });

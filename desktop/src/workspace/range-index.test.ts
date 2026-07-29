@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { overlaps, rangeOfTarget } from "./range-index";
+import { fieldContainingBit, overlaps, rangeOfTarget } from "./range-index";
 import type { PacketDocument } from "../types";
 
 describe("overlaps", () => {
@@ -81,5 +81,63 @@ describe("rangeOfTarget", () => {
     expect(
       rangeOfTarget(DOC, { kind: "operation", layerId: "1", fieldId: "2", operationId: "root" }),
     ).toBeUndefined();
+  });
+});
+
+describe("fieldContainingBit", () => {
+  const NIBBLES: PacketDocument = {
+    version: 1,
+    buffer: "45ff",
+    layers: [
+      {
+        id: 1,
+        name: "IPv4",
+        range: { start_bit: 0, len_bits: 16 },
+        fields: [
+          { id: 2, name: "Version", range: { start_bit: 0, len_bits: 4 }, kind: "uint" },
+          { id: 3, name: "IHL", range: { start_bit: 4, len_bits: 4 }, kind: "uint" },
+        ],
+      },
+    ],
+    diagnostics: [],
+  };
+
+  it("finds the field containing a bit", () => {
+    expect(fieldContainingBit(NIBBLES, 2)?.field.name).toBe("Version");
+  });
+
+  it("a byte spanning two fields resolves per bit", () => {
+    expect(fieldContainingBit(NIBBLES, 3)?.field.name).toBe("Version");
+    expect(fieldContainingBit(NIBBLES, 4)?.field.name).toBe("IHL");
+  });
+
+  it("prefers the ownerId's field when two fields overlap the bit", () => {
+    const overlapping: PacketDocument = {
+      ...NIBBLES,
+      layers: [
+        {
+          id: 1,
+          name: "L",
+          range: { start_bit: 0, len_bits: 16 },
+          fields: [
+            { id: 2, name: "A", range: { start_bit: 0, len_bits: 8 }, kind: "uint" },
+            { id: 3, name: "B", range: { start_bit: 4, len_bits: 8 }, kind: "uint" },
+          ],
+        },
+      ],
+    };
+    expect(fieldContainingBit(overlapping, 6)?.field.name).toBe("A");
+    expect(fieldContainingBit(overlapping, 6, "1:3")?.field.name).toBe("B");
+  });
+
+  it("returns null for an unfielded bit", () => {
+    expect(fieldContainingBit(NIBBLES, 12)).toBeNull();
+  });
+
+  it("a garbage or stale ownerId falls back to the document-order scan", () => {
+    expect(fieldContainingBit(NIBBLES, 2, "no-colons-here")?.field.name).toBe("Version");
+    expect(fieldContainingBit(NIBBLES, 2, "9:9")?.field.name).toBe("Version");
+    // Owner exists but doesn't contain the bit -> scan wins.
+    expect(fieldContainingBit(NIBBLES, 5, "1:2")?.field.name).toBe("IHL");
   });
 });

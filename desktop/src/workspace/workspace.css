@@ -274,6 +274,33 @@
   box-shadow: 0 0 0 3px var(--accent-soft-bg);
 }
 
+/* The bit's value doubles as its flip action — chip-styled (border, hover accent) so it reads
+   as a button, not a label. Disabled = no field owns the bit, or the field is too wide. */
+.bit-flip-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1em;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 0.5em;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bit-flip-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft-bg);
+}
+
+.bit-owner {
+  color: var(--text-faint);
+  font-size: 0.9em;
+}
+
+/* BitInspector's flip action. */
+.flip-bit {
+  margin-top: 0.6em;
+}
+
 /* ---- field detail: bytes section + derivation link ---- */
 
 .field-bytes {

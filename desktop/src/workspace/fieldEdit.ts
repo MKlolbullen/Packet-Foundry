@@ -2,7 +2,7 @@
 // per-kind branching, but for editing instead of display. `bytes`-kind fields have no separate
 // structured form (raw hex already is one), so every function here treats "bytes" as a no-op case
 // handled by FieldDetail's existing raw-hex editor instead.
-import type { Field, FieldKind, PacketDocument } from "../types";
+import type { BitRange, Field, FieldKind, PacketDocument } from "../types";
 import { hexToBytes, readBytesRange, readUintBits } from "../packet";
 
 export function hasStructuredEditor(kind: FieldKind): boolean {
@@ -99,6 +99,39 @@ export function parseStructuredValue(kind: FieldKind, text: string, lenBits: num
     case "bytes":
       return null;
   }
+}
+
+/** Mirror of the Rust check_field_bytes gate: aligned fields of any width can flip (bytes
+ * path); unaligned fields only within read_uint/write_uint's shared 64-bit cap (value path). */
+export function canFlipBit(range: BitRange): boolean {
+  const aligned = range.start_bit % 8 === 0 && range.len_bits % 8 === 0;
+  return aligned || range.len_bits <= 64;
+}
+
+/** The pinned bytes for `field` after flipping the absolute bit `bitIndex`, in the packing
+ * set_field_bytes expects (raw bytes for aligned fields, right-aligned value for unaligned) —
+ * or null if the buffer is malformed, the bit is outside the field, or an unaligned field
+ * exceeds the 64-bit read cap. The flipped result always stays within `len_bits`, so it can
+ * never fail the backend's width check. */
+export function flipBitInField(doc: PacketDocument, field: Field, bitIndex: number): Uint8Array | null {
+  const { start_bit, len_bits } = field.range;
+  const k = bitIndex - start_bit;
+  if (k < 0 || k >= len_bits) return null;
+  const bytes = hexToBytes(doc.buffer);
+  if (!bytes) return null;
+  if (start_bit % 8 === 0 && len_bits % 8 === 0) {
+    // Bytes path — required for arbitrarily long fields (a Raw payload exceeds the 64-bit cap).
+    const fieldBytes = readBytesRange(bytes, start_bit, len_bits);
+    if (!fieldBytes) return null;
+    const out = fieldBytes.slice();
+    out[k >> 3] ^= 1 << (7 - (k % 8));
+    return out;
+  }
+  // Unaligned path (not just sub-byte — a 13-bit field or one starting mid-byte lands here too):
+  // flip within the value, MSB-first to match readUintBits' bit order, pack right-aligned.
+  const value = readUintBits(bytes, start_bit, len_bits);
+  if (value === null) return null;
+  return packBigEndian(value ^ (1n << BigInt(len_bits - 1 - k)), Math.ceil(len_bits / 8));
 }
 
 function packBigEndian(value: bigint, nbytes: number): Uint8Array {
