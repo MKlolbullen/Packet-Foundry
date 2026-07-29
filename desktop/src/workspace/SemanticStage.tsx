@@ -14,6 +14,7 @@ export interface ProjectionProps<T extends FocusTarget> {
   selection?: Selection;
   onDive: (target: FocusTarget) => void;
   onSelect: (selection: Selection) => void;
+  onDocumentChange: (document: PacketDocument) => void;
 }
 
 type Registry = {

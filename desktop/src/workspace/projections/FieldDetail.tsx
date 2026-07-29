@@ -1,6 +1,8 @@
-import { useEffect } from "react";
-import { formatFieldValue, hexToBytes, locationString } from "../../packet";
-import type { BitRange } from "../../types";
+import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { formatFieldValue, hexToBytes, locationString, readBytesRange } from "../../packet";
+import { bytesToHex } from "../../hex";
+import type { BitRange, PacketDocument } from "../../types";
 import type { ProjectionProps } from "../SemanticStage";
 import { findField, type FocusTarget } from "../focus";
 
@@ -17,14 +19,40 @@ function byteSpanOf(range: BitRange): { startByte: number; endByte: number } {
   };
 }
 
-// Read-only single-field detail — no editing controls here, pinning/deriving is a later PR.
-export default function FieldDetail({ document, focus, onDive, onSelect }: ProjectionProps<FieldFocus>) {
+/** The field's current bytes, hex-encoded — for seeding/resetting the edit draft. Empty string if
+ * the buffer is malformed or the range is out of bounds (the draft input just starts blank). */
+function draftBytesFor(doc: PacketDocument, range: BitRange): string {
+  const bytes = hexToBytes(doc.buffer);
+  const fieldBytes = bytes ? readBytesRange(bytes, range.start_bit, range.len_bits) : null;
+  return fieldBytes ? bytesToHex(fieldBytes) : "";
+}
+
+// Byte-aligned fields can be pinned to an explicit value from here (raw hex only — no
+// per-kind/"Structured" editors, no bit-level editing; both are later PRs). Sub-byte fields stay
+// fully read-only until bit-level editing exists.
+export default function FieldDetail({
+  document,
+  focus,
+  onDive,
+  onSelect,
+  onDocumentChange,
+}: ProjectionProps<FieldFocus>) {
   const field = findField(document, focus.layerId, focus.fieldId);
 
   // Arriving at a field via dive auto-highlights its range elsewhere (hex rail, diagnostics)
   // without requiring an extra click.
   useEffect(() => {
     if (field) onSelect({ source: focus, range: field.range });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus.layerId, focus.fieldId]);
+
+  const [draftHex, setDraftHex] = useState("");
+  const [pending, setPending] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEditError(null);
+    setDraftHex(field ? draftBytesFor(document, field.range) : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus.layerId, focus.fieldId]);
 
@@ -37,6 +65,62 @@ export default function FieldDetail({ document, focus, onDive, onSelect }: Proje
   const state = field.override_bytes ? "pinned" : field.derivation ? "derived" : "plain";
   const { startByte, endByte } = byteSpanOf(field.range);
   const ownerId = `${focus.layerId}:${focus.fieldId}`;
+  const byteAligned = field.range.start_bit % 8 === 0 && field.range.len_bits % 8 === 0;
+  const expectedByteLen = field.range.len_bits / 8;
+
+  async function afterMutation(result: PacketDocument) {
+    onDocumentChange(result);
+    const updated = findField(result, focus.layerId, focus.fieldId);
+    setDraftHex(updated ? draftBytesFor(result, updated.range) : "");
+  }
+
+  async function setBytes() {
+    const parsed = hexToBytes(draftHex);
+    if (!parsed) {
+      setEditError("Not valid hex.");
+      return;
+    }
+    const expectedLen = expectedByteLen;
+    if (parsed.length !== expectedLen) {
+      setEditError(`Expected ${expectedLen} byte${expectedLen === 1 ? "" : "s"}, got ${parsed.length}.`);
+      return;
+    }
+    setPending(true);
+    setEditError(null);
+    try {
+      const result = await invoke<PacketDocument>("set_field_bytes", {
+        document,
+        layerId: Number(focus.layerId),
+        fieldId: Number(focus.fieldId),
+        // Re-serialize the parsed bytes, not the raw draft string — hexToBytes tolerates
+        // internal whitespace but the Rust side's hex::decode doesn't, so forwarding raw input
+        // could pass this validation and still fail the IPC call.
+        bytesHex: bytesToHex(parsed),
+      });
+      await afterMutation(result);
+    } catch (e) {
+      setEditError(String(e));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function clearPin() {
+    setPending(true);
+    setEditError(null);
+    try {
+      const result = await invoke<PacketDocument>("clear_field_override", {
+        document,
+        layerId: Number(focus.layerId),
+        fieldId: Number(focus.fieldId),
+      });
+      await afterMutation(result);
+    } catch (e) {
+      setEditError(String(e));
+    } finally {
+      setPending(false);
+    }
+  }
 
   return (
     <>
@@ -71,6 +155,33 @@ export default function FieldDetail({ document, focus, onDive, onSelect }: Proje
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="field-edit">
+        {byteAligned ? (
+          <>
+            <div className="row wrap">
+              <input
+                className="box-input hex-input"
+                value={draftHex}
+                onChange={(e) => setDraftHex(e.currentTarget.value)}
+                spellCheck={false}
+                disabled={pending}
+              />
+              <button onClick={setBytes} disabled={pending}>
+                Set bytes
+              </button>
+              {state === "pinned" && (
+                <button onClick={clearPin} disabled={pending}>
+                  Clear pin
+                </button>
+              )}
+            </div>
+            {editError && <p className="error">{editError}</p>}
+          </>
+        ) : (
+          <p className="hint">Bit-level editing isn’t supported yet.</p>
+        )}
       </div>
 
       {field.derivation && (

@@ -301,6 +301,14 @@
   box-shadow: 0 0 0 3px var(--accent-soft-bg);
 }
 
+/* ---- field detail: edit section ---- */
+
+/* Byte-aligned fields only (see FieldDetail.tsx) — reuses App.css's .row/.box-input/.hex-input/
+   .error/.hint wholesale rather than inventing new input/button visual language for one form. */
+.field-edit {
+  margin-top: 0.6em;
+}
+
 /* The gateway into the computation axis — deliberately violet (--accent-2), not the default
    blue, so it reads as "leaving structure, entering computation" rather than just another action. */
 .view-derivation {

@@ -53,7 +53,15 @@ function InspectPacketTree({ doc }: { doc: PacketDocument }) {
 // The navigable structure-axis workspace — outline | stage | diagnostics, with a hex rail below
 // and breadcrumbs above. Everything here reads `doc` via props; camera/focus state comes from
 // WorkspaceContext.
-function SemanticWorkspace({ doc, active }: { doc: PacketDocument | null; active: boolean }) {
+function SemanticWorkspace({
+  doc,
+  active,
+  onDocumentChange,
+}: {
+  doc: PacketDocument | null;
+  active: boolean;
+  onDocumentChange: (document: PacketDocument) => void;
+}) {
   const { camera, dive, jump, rise, back, forward, selectRange } = useWorkspace();
 
   useEffect(() => {
@@ -87,6 +95,7 @@ function SemanticWorkspace({ doc, active }: { doc: PacketDocument | null; active
             selection={camera.selectedRange ? { source: camera.target, range: camera.selectedRange } : undefined}
             onDive={dive}
             onSelect={(selection) => selectRange(selection.range)}
+            onDocumentChange={onDocumentChange}
           />
         </div>
         <div className="workspace-diagnostics">
@@ -175,7 +184,7 @@ export default function Workspace({ active }: { active: boolean }) {
           </div>
           {error && <p className="error">{error}</p>}
           <WorkspaceProvider>
-            <SemanticWorkspace doc={doc} active={active} />
+            <SemanticWorkspace doc={doc} active={active} onDocumentChange={setDoc} />
           </WorkspaceProvider>
         </section>
       }

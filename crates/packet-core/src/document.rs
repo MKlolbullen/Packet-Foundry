@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Diagnostic, EditHistory, Layer, NodeId, PacketBuffer};
+use crate::{Diagnostic, EditHistory, Field, Layer, NodeId, PacketBuffer};
 
 /// The on-disk schema version, bumped when the JSON layout changes incompatibly.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -57,6 +57,22 @@ impl PacketDocument {
         self.layers.iter().find(|l| l.name == name)
     }
 
+    /// Find a layer by its stable id.
+    pub fn layer_by_id(&self, id: NodeId) -> Option<&Layer> {
+        self.layers.iter().find(|l| l.id == id)
+    }
+
+    /// Find a layer by its stable id, mutably.
+    pub fn layer_by_id_mut(&mut self, id: NodeId) -> Option<&mut Layer> {
+        self.layers.iter_mut().find(|l| l.id == id)
+    }
+
+    /// Find a field by its layer and field ids, mutably — the entry point every
+    /// document-mutation command starts from.
+    pub fn field_by_id_mut(&mut self, layer_id: NodeId, field_id: NodeId) -> Option<&mut Field> {
+        self.layer_by_id_mut(layer_id)?.field_by_id_mut(field_id)
+    }
+
     /// Assign fresh, document-unique nonzero IDs to every layer/field whose `id` is still the
     /// unassigned sentinel (`NodeId(0)`). Idempotent: already-assigned nonzero IDs are never
     /// touched. Walks in document order (layer, then its fields, then the next layer) so IDs are
@@ -92,5 +108,46 @@ impl PacketDocument {
     /// including malformed packets; problems surface as diagnostics, not parse errors.
     pub fn from_json(s: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(s)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{BitRange, FieldKind};
+
+    fn doc_with_field() -> (PacketDocument, NodeId, NodeId) {
+        let mut field = Field::new("TTL", BitRange::bytes(8, 1), FieldKind::Uint);
+        field.id = NodeId(2);
+        let mut layer = Layer::new("IPv4", BitRange::bytes(0, 20), vec![field]);
+        layer.id = NodeId(1);
+        let doc = PacketDocument {
+            layers: vec![layer],
+            ..PacketDocument::new()
+        };
+        (doc, NodeId(1), NodeId(2))
+    }
+
+    #[test]
+    fn layer_by_id_finds_matching_layer() {
+        let (doc, layer_id, _) = doc_with_field();
+        assert_eq!(doc.layer_by_id(layer_id).unwrap().name, "IPv4");
+        assert!(doc.layer_by_id(NodeId(999)).is_none());
+    }
+
+    #[test]
+    fn layer_by_id_mut_finds_matching_layer() {
+        let (mut doc, layer_id, _) = doc_with_field();
+        doc.layer_by_id_mut(layer_id).unwrap().name = "Renamed".into();
+        assert_eq!(doc.layer_by_id(layer_id).unwrap().name, "Renamed");
+    }
+
+    #[test]
+    fn field_by_id_mut_composes_both_lookups() {
+        let (mut doc, layer_id, field_id) = doc_with_field();
+        doc.field_by_id_mut(layer_id, field_id).unwrap().name = "Renamed".into();
+        assert_eq!(doc.layer_by_id(layer_id).unwrap().fields[0].name, "Renamed");
+        assert!(doc.field_by_id_mut(layer_id, NodeId(999)).is_none());
+        assert!(doc.field_by_id_mut(NodeId(999), field_id).is_none());
     }
 }
