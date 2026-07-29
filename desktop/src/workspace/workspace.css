@@ -321,6 +321,19 @@
   margin-top: 0.6em;
 }
 
+/* Structured/Raw switch — the pill-toggle *container* is new (App.css's .theme-toggle carries
+   header-bar-specific flex/positioning that would misbehave inline), but the buttons inside
+   reuse App.css's .theme-option/.theme-option.active directly by className, not a clone. */
+.edit-mode-toggle {
+  display: flex;
+  gap: 0.2rem;
+  background: var(--bg-subtle);
+  border-radius: 8px;
+  padding: 0.2rem;
+  width: fit-content;
+  margin-bottom: 0.4em;
+}
+
 /* The gateway into the computation axis — deliberately violet (--accent-2), not the default
    blue, so it reads as "leaving structure, entering computation" rather than just another action. */
 .view-derivation {

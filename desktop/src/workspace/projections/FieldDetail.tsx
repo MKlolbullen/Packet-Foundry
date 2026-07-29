@@ -5,6 +5,13 @@ import { bytesToHex } from "../../hex";
 import type { BitRange, PacketDocument } from "../../types";
 import type { ProjectionProps } from "../SemanticStage";
 import { findField, type FocusTarget } from "../focus";
+import {
+  hasStructuredEditor,
+  parseStructuredValue,
+  structuredDraftFor,
+  structuredErrorMessage,
+  structuredPlaceholder,
+} from "../fieldEdit";
 
 type FieldFocus = Extract<FocusTarget, { kind: "field" }>;
 
@@ -27,8 +34,8 @@ function draftBytesFor(doc: PacketDocument, range: BitRange): string {
   return fieldBytes ? bytesToHex(fieldBytes) : "";
 }
 
-// Byte-aligned fields can be pinned to an explicit value from here (raw hex only — no
-// per-kind/"Structured" editors, no bit-level editing; both are later PRs). Sub-byte fields stay
+// Byte-aligned fields can be pinned to an explicit value from here — either a typed "Structured"
+// editor (per FieldKind, e.g. dotted-decimal for ipv4_addr) or raw hex. Sub-byte fields stay
 // fully read-only until bit-level editing exists.
 export default function FieldDetail({
   document,
@@ -47,17 +54,28 @@ export default function FieldDetail({
   }, [focus.layerId, focus.fieldId]);
 
   const [draftHex, setDraftHex] = useState("");
+  const [structuredDraft, setStructuredDraft] = useState("");
+  const [editMode, setEditMode] = useState<"structured" | "raw">("structured");
   const [pending, setPending] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
-  // Re-syncs on a focus change (a different field) *and* on a document swap for the same field —
-  // the latter matters because undo/redo replaces `document` out from under an open editor
-  // without going through afterMutation, which is the only other place this draft gets updated.
+  // Re-syncs both drafts on a focus change (a different field) *and* on a document swap for the
+  // same field — the latter matters because undo/redo replaces `document` out from under an open
+  // editor without going through afterMutation, which is the only other place these get updated.
   useEffect(() => {
     setEditError(null);
     setDraftHex(field ? draftBytesFor(document, field.range) : "");
+    setStructuredDraft(field ? structuredDraftFor(document, field) : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus.layerId, focus.fieldId, document]);
+
+  // Deliberately a *separate* effect, keyed only on the field (not `document`): which editor mode
+  // is showing is a per-field UI preference, not a value — an unrelated undo/redo on this same
+  // field shouldn't silently flip a user's manual "Raw" choice back to "Structured".
+  useEffect(() => {
+    setEditMode(field && hasStructuredEditor(field.kind) ? "structured" : "raw");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus.layerId, focus.fieldId]);
 
   if (!field) {
     return <p className="hint">This field is no longer present — the stack was re-assembled.</p>;
@@ -70,11 +88,34 @@ export default function FieldDetail({
   const ownerId = `${focus.layerId}:${focus.fieldId}`;
   const byteAligned = field.range.start_bit % 8 === 0 && field.range.len_bits % 8 === 0;
   const expectedByteLen = field.range.len_bits / 8;
+  const fieldKind = field.kind;
 
   async function afterMutation(result: PacketDocument) {
     onDocumentChange(result);
     const updated = findField(result, focus.layerId, focus.fieldId);
     setDraftHex(updated ? draftBytesFor(result, updated.range) : "");
+    setStructuredDraft(updated ? structuredDraftFor(result, updated) : "");
+  }
+
+  // Shared by both editors: bytes have already been validated (and are exactly the field's
+  // expected length) by the caller — this just re-serializes to hex (never forwards raw user
+  // text — hexToBytes tolerates internal whitespace but Rust's hex::decode doesn't) and invokes.
+  async function commitBytes(bytes: Uint8Array) {
+    setPending(true);
+    setEditError(null);
+    try {
+      const result = await invoke<PacketDocument>("set_field_bytes", {
+        document,
+        layerId: Number(focus.layerId),
+        fieldId: Number(focus.fieldId),
+        bytesHex: bytesToHex(bytes),
+      });
+      await afterMutation(result);
+    } catch (e) {
+      setEditError(String(e));
+    } finally {
+      setPending(false);
+    }
   }
 
   async function setBytes() {
@@ -83,29 +124,20 @@ export default function FieldDetail({
       setEditError("Not valid hex.");
       return;
     }
-    const expectedLen = expectedByteLen;
-    if (parsed.length !== expectedLen) {
-      setEditError(`Expected ${expectedLen} byte${expectedLen === 1 ? "" : "s"}, got ${parsed.length}.`);
+    if (parsed.length !== expectedByteLen) {
+      setEditError(`Expected ${expectedByteLen} byte${expectedByteLen === 1 ? "" : "s"}, got ${parsed.length}.`);
       return;
     }
-    setPending(true);
-    setEditError(null);
-    try {
-      const result = await invoke<PacketDocument>("set_field_bytes", {
-        document,
-        layerId: Number(focus.layerId),
-        fieldId: Number(focus.fieldId),
-        // Re-serialize the parsed bytes, not the raw draft string — hexToBytes tolerates
-        // internal whitespace but the Rust side's hex::decode doesn't, so forwarding raw input
-        // could pass this validation and still fail the IPC call.
-        bytesHex: bytesToHex(parsed),
-      });
-      await afterMutation(result);
-    } catch (e) {
-      setEditError(String(e));
-    } finally {
-      setPending(false);
+    await commitBytes(parsed);
+  }
+
+  async function setStructuredValue() {
+    const parsed = parseStructuredValue(fieldKind, structuredDraft, expectedByteLen);
+    if (!parsed) {
+      setEditError(structuredErrorMessage(fieldKind));
+      return;
     }
+    await commitBytes(parsed);
   }
 
   async function clearPin() {
@@ -163,23 +195,62 @@ export default function FieldDetail({
       <div className="field-edit">
         {byteAligned ? (
           <>
-            <div className="row wrap">
-              <input
-                className="box-input hex-input"
-                value={draftHex}
-                onChange={(e) => setDraftHex(e.currentTarget.value)}
-                spellCheck={false}
-                disabled={pending}
-              />
-              <button onClick={setBytes} disabled={pending}>
-                Set bytes
-              </button>
-              {state === "pinned" && (
-                <button onClick={clearPin} disabled={pending}>
-                  Clear pin
+            {hasStructuredEditor(field.kind) && (
+              <div className="edit-mode-toggle" role="radiogroup" aria-label="Edit mode">
+                <button
+                  className={editMode === "structured" ? "theme-option active" : "theme-option"}
+                  aria-pressed={editMode === "structured"}
+                  onClick={() => setEditMode("structured")}
+                >
+                  Structured
                 </button>
-              )}
-            </div>
+                <button
+                  className={editMode === "raw" ? "theme-option active" : "theme-option"}
+                  aria-pressed={editMode === "raw"}
+                  onClick={() => setEditMode("raw")}
+                >
+                  Raw
+                </button>
+              </div>
+            )}
+            {editMode === "structured" && hasStructuredEditor(field.kind) ? (
+              <div className="row wrap">
+                <input
+                  className="box-input"
+                  value={structuredDraft}
+                  onChange={(e) => setStructuredDraft(e.currentTarget.value)}
+                  placeholder={structuredPlaceholder(field.kind)}
+                  spellCheck={false}
+                  disabled={pending}
+                />
+                <button onClick={setStructuredValue} disabled={pending}>
+                  Set value
+                </button>
+                {state === "pinned" && (
+                  <button onClick={clearPin} disabled={pending}>
+                    Clear pin
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="row wrap">
+                <input
+                  className="box-input hex-input"
+                  value={draftHex}
+                  onChange={(e) => setDraftHex(e.currentTarget.value)}
+                  spellCheck={false}
+                  disabled={pending}
+                />
+                <button onClick={setBytes} disabled={pending}>
+                  Set bytes
+                </button>
+                {state === "pinned" && (
+                  <button onClick={clearPin} disabled={pending}>
+                    Clear pin
+                  </button>
+                )}
+              </div>
+            )}
             {editError && <p className="error">{editError}</p>}
           </>
         ) : (
