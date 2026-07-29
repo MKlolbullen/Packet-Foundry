@@ -9,6 +9,14 @@ export function hasStructuredEditor(kind: FieldKind): boolean {
   return kind !== "bytes";
 }
 
+/** Sub-byte fields are editable only as unsigned values — and only within readUintBits'/
+ * write_uint's shared 64-bit cap; anything else gets the "not supported" hint. (Deliberately
+ * narrower than hasStructuredEditor: a hypothetical sub-byte mac/ipv4 field would render a
+ * permanently-erroring input, not an editor.) */
+export function canEditSubByte(kind: FieldKind, lenBits: number): boolean {
+  return (kind === "uint" || kind === "flags") && lenBits <= 64;
+}
+
 export function structuredPlaceholder(kind: FieldKind): string {
   switch (kind) {
     case "uint":
@@ -70,21 +78,24 @@ export function structuredDraftFor(document: PacketDocument, field: Field): stri
   }
 }
 
-// Inverse: a kind-appropriate string -> exactly `expectedBytes` raw bytes, or null on any
+// Inverse: a kind-appropriate string -> the field's value packed into ceil(lenBits/8) bytes
+// (right-aligned for sub-byte widths — the encoding set_field_bytes expects), or null on any
 // validation failure. Uses BigInt throughout (not a bare JS number) so a uint/flags field up to
 // readUintBits' own 64-bit cap round-trips exactly, matching its bigint semantics rather than
 // losing precision above 2^53 the way a plain-number input would.
-export function parseStructuredValue(kind: FieldKind, text: string, expectedBytes: number): Uint8Array | null {
+export function parseStructuredValue(kind: FieldKind, text: string, lenBits: number): Uint8Array | null {
   const trimmed = text.trim();
   switch (kind) {
     case "uint":
-      return parseDecimalUint(trimmed, expectedBytes);
+      return parseDecimalUint(trimmed, lenBits);
     case "flags":
-      return parseHexUint(trimmed, expectedBytes);
+      return parseHexUint(trimmed, lenBits);
+    // mac/ipv4 are byte-shaped by nature; lenBits is a whole-byte multiple for every real field
+    // of these kinds, and a fractional part count fails the parsers' exact-count checks anyway.
     case "mac_addr":
-      return parseColonHex(trimmed, expectedBytes);
+      return parseColonHex(trimmed, lenBits / 8);
     case "ipv4_addr":
-      return parseDottedDecimal(trimmed, expectedBytes);
+      return parseDottedDecimal(trimmed, lenBits / 8);
     case "bytes":
       return null;
   }
@@ -96,19 +107,19 @@ function packBigEndian(value: bigint, nbytes: number): Uint8Array {
   return out;
 }
 
-function parseDecimalUint(text: string, nbytes: number): Uint8Array | null {
+function parseDecimalUint(text: string, lenBits: number): Uint8Array | null {
   if (!/^\d+$/.test(text)) return null;
   const value = BigInt(text);
-  if (value >= 1n << BigInt(nbytes * 8)) return null;
-  return packBigEndian(value, nbytes);
+  if (value >= 1n << BigInt(lenBits)) return null;
+  return packBigEndian(value, Math.ceil(lenBits / 8));
 }
 
-function parseHexUint(text: string, nbytes: number): Uint8Array | null {
+function parseHexUint(text: string, lenBits: number): Uint8Array | null {
   const hex = text.replace(/^0[xX]/, "");
   if (!/^[0-9a-fA-F]+$/.test(hex)) return null;
   const value = BigInt(`0x${hex}`);
-  if (value >= 1n << BigInt(nbytes * 8)) return null;
-  return packBigEndian(value, nbytes);
+  if (value >= 1n << BigInt(lenBits)) return null;
+  return packBigEndian(value, Math.ceil(lenBits / 8));
 }
 
 function parseColonHex(text: string, nbytes: number): Uint8Array | null {

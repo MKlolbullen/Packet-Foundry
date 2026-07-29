@@ -6,6 +6,7 @@ import type { BitRange, PacketDocument } from "../../types";
 import type { ProjectionProps } from "../SemanticStage";
 import { findField, type FocusTarget } from "../focus";
 import {
+  canEditSubByte,
   hasStructuredEditor,
   parseStructuredValue,
   structuredDraftFor,
@@ -34,9 +35,10 @@ function draftBytesFor(doc: PacketDocument, range: BitRange): string {
   return fieldBytes ? bytesToHex(fieldBytes) : "";
 }
 
-// Byte-aligned fields can be pinned to an explicit value from here — either a typed "Structured"
-// editor (per FieldKind, e.g. dotted-decimal for ipv4_addr) or raw hex. Sub-byte fields stay
-// fully read-only until bit-level editing exists.
+// Fields can be pinned to an explicit value from here. Byte-aligned fields get a typed
+// "Structured" editor (per FieldKind, e.g. dotted-decimal for ipv4_addr) and a raw-hex editor,
+// toggleable; sub-byte fields (a nibble Version, a 3-bit flag) get the structured editor only —
+// there's no raw-bytes form for a range that doesn't own whole bytes.
 export default function FieldDetail({
   document,
   focus,
@@ -87,8 +89,17 @@ export default function FieldDetail({
   const { startByte, endByte } = byteSpanOf(field.range);
   const ownerId = `${focus.layerId}:${focus.fieldId}`;
   const byteAligned = field.range.start_bit % 8 === 0 && field.range.len_bits % 8 === 0;
-  const expectedByteLen = field.range.len_bits / 8;
+  const lenBits = field.range.len_bits;
+  // Whole for aligned fields, which are the only place the raw-hex path (its sole consumer) renders.
+  const expectedByteLen = lenBits / 8;
   const fieldKind = field.kind;
+  // Editor availability tiers: aligned structured kinds get the toggle + both editors; aligned
+  // bytes-kind gets raw only; sub-byte uint/flags get structured only; anything else sub-byte
+  // (no built-in produces one) falls back to the "not supported" hint.
+  const structuredAvailable = byteAligned ? hasStructuredEditor(fieldKind) : canEditSubByte(fieldKind, lenBits);
+  const rawAvailable = byteAligned;
+  const showToggle = structuredAvailable && rawAvailable;
+  const showStructured = structuredAvailable && (editMode === "structured" || !rawAvailable);
 
   async function afterMutation(result: PacketDocument) {
     onDocumentChange(result);
@@ -97,9 +108,10 @@ export default function FieldDetail({
     setStructuredDraft(updated ? structuredDraftFor(result, updated) : "");
   }
 
-  // Shared by both editors: bytes have already been validated (and are exactly the field's
-  // expected length) by the caller — this just re-serializes to hex (never forwards raw user
-  // text — hexToBytes tolerates internal whitespace but Rust's hex::decode doesn't) and invokes.
+  // Shared by both editors: bytes have already been validated (and packed to the field's
+  // expected byte count — exact for aligned fields, ceil(len_bits/8) for sub-byte) by the
+  // caller — this just re-serializes to hex (never forwards raw user text — hexToBytes tolerates
+  // internal whitespace but Rust's hex::decode doesn't) and invokes.
   async function commitBytes(bytes: Uint8Array) {
     setPending(true);
     setEditError(null);
@@ -132,7 +144,7 @@ export default function FieldDetail({
   }
 
   async function setStructuredValue() {
-    const parsed = parseStructuredValue(fieldKind, structuredDraft, expectedByteLen);
+    const parsed = parseStructuredValue(fieldKind, structuredDraft, lenBits);
     if (!parsed) {
       setEditError(structuredErrorMessage(fieldKind));
       return;
@@ -193,9 +205,9 @@ export default function FieldDetail({
       </div>
 
       <div className="field-edit">
-        {byteAligned ? (
+        {structuredAvailable || rawAvailable ? (
           <>
-            {hasStructuredEditor(field.kind) && (
+            {showToggle && (
               <div className="edit-mode-toggle" role="radiogroup" aria-label="Edit mode">
                 <button
                   className={editMode === "structured" ? "theme-option active" : "theme-option"}
@@ -213,7 +225,7 @@ export default function FieldDetail({
                 </button>
               </div>
             )}
-            {editMode === "structured" && hasStructuredEditor(field.kind) ? (
+            {showStructured ? (
               <div className="row wrap">
                 <input
                   className="box-input"

@@ -61,6 +61,12 @@ impl PacketBuffer {
         range.write_bytes(&mut self.bytes, bytes)
     }
 
+    /// Write a field-sized byte array into a range, aligned or not — see
+    /// [`BitRange::write_field_bytes`].
+    pub fn write_field_bytes(&mut self, range: BitRange, bytes: &[u8]) -> Result<(), CoreError> {
+        range.write_field_bytes(&mut self.bytes, bytes)
+    }
+
     /// Append bytes to the end of the buffer, returning the byte offset they start at. Used when
     /// stacking layers.
     pub fn append(&mut self, bytes: &[u8]) -> usize {

@@ -171,6 +171,11 @@ fn lower_all(
 }
 
 /// Write a field's big-endian default into the header, byte-aligned or bit-packed.
+///
+/// Deliberately NOT `BitRange::write_field_bytes` (which pins use): defaults tolerate an
+/// aligned-but-short byte array (a 16-bit field with `default: [5]` writes value 5), while the
+/// shared helper strictly requires exact/ceil lengths. Third-party descriptors rely on the
+/// tolerant behavior, so the ~6-line fold stays duplicated on purpose.
 fn write_default(header: &mut [u8], rel: BitRange, default: &[u8]) -> Result<(), DescriptorError> {
     if rel.start_bit % 8 == 0 && rel.len_bits % 8 == 0 && default.len() * 8 == rel.len_bits {
         rel.write_bytes(header, default)?;

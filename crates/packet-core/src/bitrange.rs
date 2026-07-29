@@ -40,6 +40,11 @@ pub enum CoreError {
     LengthMismatch { expected: usize, got: usize },
 }
 
+/// Fold a byte slice into a `u64`, big-endian. Callers must ensure `bytes.len() <= 8`.
+fn fold_big_endian(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0u64, |acc, &b| (acc << 8) | u64::from(b))
+}
+
 impl BitRange {
     /// A range of `len_bits` bits starting at `start_bit`.
     pub const fn new(start_bit: usize, len_bits: usize) -> Self {
@@ -152,6 +157,58 @@ impl BitRange {
         let start = self.start_bit / 8;
         buf[start..start + bytes.len()].copy_from_slice(bytes);
         Ok(())
+    }
+
+    /// Validate that `bytes` is applicable to this range in a buffer of `buf_len` bytes, without
+    /// writing — the exact rules `write_field_bytes` enforces, as a pure predicate. Byte-aligned
+    /// ranges require the exact byte length; any other range requires `len_bits <= 64` and
+    /// `bytes.len() == len_bits.div_ceil(8)` with the folded big-endian value fitting in
+    /// `len_bits`.
+    pub fn check_field_bytes(self, bytes: &[u8], buf_len: usize) -> Result<(), CoreError> {
+        if self.start_bit % 8 == 0 && self.len_bits % 8 == 0 {
+            if bytes.len() * 8 != self.len_bits {
+                return Err(CoreError::LengthMismatch {
+                    expected: self.len_bits / 8,
+                    got: bytes.len(),
+                });
+            }
+            self.check_bounds(buf_len)
+        } else {
+            // Width and byte-count checks must precede the fold — folding more than 8 bytes
+            // would silently shift the high bytes out of the u64.
+            if self.len_bits > 64 {
+                return Err(CoreError::RangeTooWide { len: self.len_bits });
+            }
+            if bytes.len() != self.len_bits.div_ceil(8) {
+                return Err(CoreError::LengthMismatch {
+                    expected: self.len_bits.div_ceil(8),
+                    got: bytes.len(),
+                });
+            }
+            self.check_bounds(buf_len)?;
+            let value = fold_big_endian(bytes);
+            if self.len_bits < 64 && value >= (1u64 << self.len_bits) {
+                return Err(CoreError::ValueTooWide {
+                    value,
+                    len: self.len_bits,
+                });
+            }
+            Ok(())
+        }
+    }
+
+    /// Write a field-sized byte array into this range — byte-aligned ranges take the bytes
+    /// verbatim (`write_bytes` semantics, exact length); sub-byte/unaligned ranges interpret
+    /// them as a big-endian value packed right-aligned into `ceil(len_bits/8)` bytes and write
+    /// via `write_uint` (preserving surrounding bits). Matches the convention descriptor
+    /// defaults already use for sub-byte fields — see protocol-engine's `write_default`.
+    pub fn write_field_bytes(self, buf: &mut [u8], bytes: &[u8]) -> Result<(), CoreError> {
+        self.check_field_bytes(bytes, buf.len())?;
+        if self.start_bit % 8 == 0 && self.len_bits % 8 == 0 {
+            self.write_bytes(buf, bytes)
+        } else {
+            self.write_uint(buf, fold_big_endian(bytes))
+        }
     }
 
     /// Whether this range shares any bit position with `other`. A zero-length range contains no
@@ -316,6 +373,72 @@ mod tests {
             BitRange::bytes(1, 2).write_bytes(&mut buf, &[0xAA]).unwrap_err(),
             CoreError::LengthMismatch { expected: 2, got: 1 }
         );
+    }
+
+    // ---- field-bytes write: aligned ranges verbatim, sub-byte ranges as right-aligned values
+
+    #[test]
+    fn field_bytes_aligned_writes_verbatim() {
+        let mut buf = [0x00, 0x00, 0x00, 0x00];
+        BitRange::bytes(1, 2).write_field_bytes(&mut buf, &[0xAA, 0xBB]).unwrap();
+        assert_eq!(buf, [0x00, 0xAA, 0xBB, 0x00]);
+    }
+
+    #[test]
+    fn field_bytes_sub_byte_writes_value_and_preserves_neighbours() {
+        // The IPv4 Version/IHL byte: set the high nibble to 6, the low nibble (5) must survive.
+        let mut buf = [0x45, 0xFF];
+        BitRange::new(0, 4).write_field_bytes(&mut buf, &[0x06]).unwrap();
+        assert_eq!(buf, [0x65, 0xFF]);
+    }
+
+    #[test]
+    fn field_bytes_aligned_wrong_length_is_length_mismatch() {
+        let mut buf = [0x00, 0x00, 0x00];
+        assert_eq!(
+            BitRange::bytes(0, 2).write_field_bytes(&mut buf, &[0xAA]).unwrap_err(),
+            CoreError::LengthMismatch { expected: 2, got: 1 }
+        );
+    }
+
+    #[test]
+    fn field_bytes_sub_byte_wrong_length_is_length_mismatch() {
+        let mut buf = [0x00, 0x00];
+        // A 12-bit range needs ceil(12/8) = 2 bytes.
+        assert_eq!(
+            BitRange::new(4, 12).write_field_bytes(&mut buf, &[0x0F]).unwrap_err(),
+            CoreError::LengthMismatch { expected: 2, got: 1 }
+        );
+    }
+
+    #[test]
+    fn field_bytes_sub_byte_overwide_value_errors_untouched() {
+        let mut buf = [0x45];
+        assert_eq!(
+            BitRange::new(0, 4).write_field_bytes(&mut buf, &[0x10]).unwrap_err(),
+            CoreError::ValueTooWide { value: 0x10, len: 4 }
+        );
+        assert_eq!(buf, [0x45]);
+    }
+
+    #[test]
+    fn field_bytes_unaligned_wider_than_64_bits_errors() {
+        let mut buf = [0x00; 16];
+        assert!(matches!(
+            BitRange::new(4, 72).write_field_bytes(&mut buf, &[0x00; 9]).unwrap_err(),
+            CoreError::RangeTooWide { len: 72 }
+        ));
+    }
+
+    #[test]
+    fn check_field_bytes_mirrors_write_without_mutating() {
+        let buf = [0x45, 0xFF];
+        assert!(BitRange::new(0, 4).check_field_bytes(&[0x06], buf.len()).is_ok());
+        assert!(BitRange::new(0, 4).check_field_bytes(&[0x10], buf.len()).is_err());
+        assert!(BitRange::bytes(0, 2).check_field_bytes(&[0xAA, 0xBB], buf.len()).is_ok());
+        assert!(BitRange::bytes(0, 2).check_field_bytes(&[0xAA], buf.len()).is_err());
+        // Out of bounds for the buffer.
+        assert!(BitRange::new(12, 8).check_field_bytes(&[0x01], buf.len()).is_err());
     }
 
     // ---- property: writing a value then reading it back is identity, and bits outside
