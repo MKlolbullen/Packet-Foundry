@@ -7,7 +7,7 @@
 //! absolute-offset [`Operation`] IR the hand-written builders emit — so a descriptor and a Rust
 //! builder produce byte-identical output.
 
-use packet_core::{BitRange, CoreError, Field, FieldKind, Layer, Operation};
+use packet_core::{BitRange, CoreError, Field, FieldKind, Layer, NodeId, Operation};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -122,6 +122,7 @@ pub fn lower(
             None => None,
         };
         fields.push(Field {
+            id: NodeId::default(),
             name: fd.name.clone(),
             range: abs,
             kind: fd.kind,

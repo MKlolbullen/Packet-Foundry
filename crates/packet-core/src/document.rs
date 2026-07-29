@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Diagnostic, EditHistory, Layer, PacketBuffer};
+use crate::{Diagnostic, EditHistory, Layer, NodeId, PacketBuffer};
 
 /// The on-disk schema version, bumped when the JSON layout changes incompatibly.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -55,6 +55,32 @@ impl PacketDocument {
     /// Find a layer by name.
     pub fn layer(&self, name: &str) -> Option<&Layer> {
         self.layers.iter().find(|l| l.name == name)
+    }
+
+    /// Assign fresh, document-unique nonzero IDs to every layer/field whose `id` is still the
+    /// unassigned sentinel (`NodeId(0)`). Idempotent: already-assigned nonzero IDs are never
+    /// touched. Walks in document order (layer, then its fields, then the next layer) so IDs are
+    /// stable and deterministic for a given document shape.
+    pub fn assign_missing_node_ids(&mut self) {
+        let mut next = self
+            .layers
+            .iter()
+            .flat_map(|l| std::iter::once(l.id.0).chain(l.fields.iter().map(|f| f.id.0)))
+            .max()
+            .unwrap_or(0)
+            + 1;
+        for layer in &mut self.layers {
+            if layer.id.0 == 0 {
+                layer.id = NodeId(next);
+                next += 1;
+            }
+            for field in &mut layer.fields {
+                if field.id.0 == 0 {
+                    field.id = NodeId(next);
+                    next += 1;
+                }
+            }
+        }
     }
 
     /// Serialize to pretty JSON.

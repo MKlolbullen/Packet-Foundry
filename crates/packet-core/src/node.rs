@@ -9,6 +9,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{BitRange, Operation};
 
+/// A stable identity for a structural node (`Layer` or `Field`) that survives edits and
+/// serialization round-trips. `NodeId(0)` is the "unassigned" sentinel — never used to identify
+/// a real node; [`crate::PacketDocument::assign_missing_node_ids`] replaces every `0` with a
+/// fresh, document-unique nonzero value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub struct NodeId(pub u64);
+
 /// How a field's bytes should be interpreted for display.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -28,6 +35,7 @@ pub enum FieldKind {
 /// A named region of the buffer within a layer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Field {
+    pub id: NodeId,
     pub name: String,
     /// Absolute range within the document buffer.
     pub range: BitRange,
@@ -44,6 +52,7 @@ impl Field {
     /// A plain field with no derivation.
     pub fn new(name: impl Into<String>, range: BitRange, kind: FieldKind) -> Self {
         Self {
+            id: NodeId::default(),
             name: name.into(),
             range,
             kind,
@@ -60,6 +69,7 @@ impl Field {
         derivation: Operation,
     ) -> Self {
         Self {
+            id: NodeId::default(),
             name: name.into(),
             range,
             kind,
@@ -77,6 +87,7 @@ impl Field {
 /// A protocol layer: a named span of the buffer holding a list of fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Layer {
+    pub id: NodeId,
     pub name: String,
     /// Absolute range of the whole layer within the document buffer.
     pub range: BitRange,
@@ -86,6 +97,7 @@ pub struct Layer {
 impl Layer {
     pub fn new(name: impl Into<String>, range: BitRange, fields: Vec<Field>) -> Self {
         Self {
+            id: NodeId::default(),
             name: name.into(),
             range,
             fields,

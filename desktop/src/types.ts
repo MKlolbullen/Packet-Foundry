@@ -10,6 +10,8 @@ export interface BitRange {
 export type FieldKind = "uint" | "bytes" | "mac_addr" | "ipv4_addr" | "flags";
 
 export interface Field {
+  /** Stable identity (Rust `NodeId`, a `u64`) — `0` means unassigned. */
+  id: number;
   name: string;
   range: BitRange;
   kind: FieldKind;
@@ -18,6 +20,8 @@ export interface Field {
 }
 
 export interface Layer {
+  /** Stable identity (Rust `NodeId`, a `u64`) — `0` means unassigned. */
+  id: number;
   name: string;
   range: BitRange;
   fields: Field[];

@@ -1,0 +1,278 @@
+/* The semantic-camera workspace: outline | stage | diagnostics, with a hex rail below and
+   breadcrumbs above. A plain CSS grid, not nested SplitPanes — a 4-panel layout would need three
+   nested 2-pane SplitPanes, each carrying its own display:none-collapse footgun and
+   active-gated remeasure/storageKey. Side panels aren't user-resizable here; that's an accepted
+   trade for this first pass — a later PR can swap in SplitPane/a purpose-built splitter once the
+   panel contents are stable enough to be worth making resizable. */
+
+.semantic-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}
+
+.semantic-workspace-grid {
+  display: grid;
+  grid-template-columns: 170px 1fr 210px;
+  gap: 0.6rem;
+  /* Panels size to their own content, not to the tallest sibling or a container floor — a
+     stretched grid item with an auto-height table child ends up distributing the stretch into
+     the table's rows (each row inflates to fill the leftover space) rather than just leaving
+     blank space below the content, which is what we actually want. */
+  align-items: start;
+}
+
+.semantic-workspace-stage,
+.packet-outline,
+.workspace-diagnostics {
+  min-height: 18em;
+}
+
+.semantic-workspace-stage {
+  min-width: 0;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  overflow: auto;
+}
+
+/* ---- breadcrumbs ---- */
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85em;
+}
+
+.breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.breadcrumb-sep {
+  color: #999;
+}
+
+.breadcrumb-link {
+  background: transparent;
+  border: none;
+  padding: 0.1em 0.3em;
+  color: #396cd8;
+  cursor: pointer;
+  font-size: 1em;
+}
+
+.breadcrumb-link:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb-current {
+  font-weight: 600;
+}
+
+.breadcrumb-axis {
+  margin-left: auto;
+  color: #888;
+  text-transform: capitalize;
+  font-size: 0.85em;
+}
+
+/* ---- packet outline ---- */
+
+.packet-outline {
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  padding: 0.5rem;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.outline-layer {
+  display: flex;
+  flex-direction: column;
+}
+
+.outline-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  padding: 0.3em 0.5em;
+  font-size: 0.85em;
+  color: inherit;
+}
+
+.outline-row:hover {
+  background: #f0f0f0;
+}
+
+.outline-row.active {
+  background: #dbe8ff;
+  color: #2952a3;
+  font-weight: 600;
+}
+
+.outline-fields {
+  display: flex;
+  flex-direction: column;
+  padding-left: 0.8rem;
+}
+
+/* ---- packet overview (packet-focus projection) ---- */
+
+.packet-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.overview-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  padding: 0.5em 0.8em;
+  cursor: pointer;
+}
+
+.overview-row:hover,
+.overview-row:focus-visible {
+  border-color: #396cd8;
+}
+
+.overview-row-name {
+  font-weight: 600;
+}
+
+.overview-row-count {
+  margin-left: auto;
+  color: #888;
+  font-size: 0.85em;
+}
+
+/* ---- layer field map (layer-focus projection) ---- */
+
+/* The shared `.fields` table (App.css) uses table-layout:auto with a nowrap name column and a
+   word-break:break-all value column — fine in the old full-width Build pane, but the stage
+   column here is much narrower. Under auto layout a squeezed value column can collapse toward
+   zero width, and word-break:break-all then wraps its content one or two characters per line,
+   inflating the row to a huge height. Fixed proportional columns keep every column a sane
+   minimum width so long values wrap a few words per line instead. */
+.semantic-workspace-stage .fields {
+  table-layout: fixed;
+  /* A floor so columns never get squeezed toward zero in a narrow window — the stage container
+     already scrolls (see .semantic-workspace-stage's overflow: auto above), so a table that
+     doesn't fit just gets a horizontal scrollbar instead of wrapping every cell illegibly. */
+  min-width: 340px;
+}
+
+.semantic-workspace-stage .fields .field-name {
+  width: 32%;
+  white-space: normal;
+}
+
+.semantic-workspace-stage .fields .loc {
+  width: 22%;
+}
+
+.semantic-workspace-stage .fields .field-value {
+  width: 32%;
+}
+
+.semantic-workspace-stage .fields .field-marker {
+  width: 14%;
+}
+
+/* ---- field detail (field-focus projection) ---- */
+
+.field-detail {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3em 0.8em;
+  margin: 0;
+}
+
+.field-detail dt {
+  color: #888;
+  font-size: 0.85em;
+}
+
+.field-detail dd {
+  margin: 0;
+}
+
+/* ---- fallback ---- */
+
+.projection-fallback {
+  color: #888;
+}
+
+/* ---- hex bit rail ---- */
+
+.hex-bit-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 0.5rem;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8em;
+}
+
+.hex-byte {
+  padding: 0.15em 0.3em;
+  border-radius: 3px;
+}
+
+.hex-byte-selected {
+  background: #dbe8ff;
+  color: #2952a3;
+}
+
+.hex-byte-diagnosed {
+  outline: 2px solid #8a5a00;
+  outline-offset: -1px;
+}
+
+/* ---- diagnostics cross-highlight ---- */
+
+.diagnostic-highlighted {
+  background: #dbe8ff;
+  border-radius: 4px;
+}
+
+/* ---- dark theme ---- */
+
+:root[data-theme="dark"] .semantic-workspace-stage,
+:root[data-theme="dark"] .packet-outline,
+:root[data-theme="dark"] .overview-row {
+  border-color: #3a3a3a;
+}
+
+:root[data-theme="dark"] .breadcrumb-axis,
+:root[data-theme="dark"] .breadcrumb-sep,
+:root[data-theme="dark"] .overview-row-count,
+:root[data-theme="dark"] .field-detail dt,
+:root[data-theme="dark"] .projection-fallback {
+  color: #999;
+}
+
+:root[data-theme="dark"] .outline-row:hover {
+  background: #262626;
+}
+
+:root[data-theme="dark"] .outline-row.active,
+:root[data-theme="dark"] .hex-byte-selected,
+:root[data-theme="dark"] .diagnostic-highlighted {
+  background: #1e2740;
+  color: #9db4ec;
+}

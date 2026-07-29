@@ -153,6 +153,17 @@ impl BitRange {
         buf[start..start + bytes.len()].copy_from_slice(bytes);
         Ok(())
     }
+
+    /// Whether this range shares any bit position with `other`. A zero-length range contains no
+    /// bit positions, so it never overlaps anything, including another zero-length range.
+    pub fn overlaps(self, other: BitRange) -> bool {
+        if self.len_bits == 0 || other.len_bits == 0 {
+            return false;
+        }
+        let a_end = self.start_bit + self.len_bits;
+        let b_end = other.start_bit + other.len_bits;
+        self.start_bit < b_end && other.start_bit < a_end
+    }
 }
 
 #[cfg(test)]
@@ -340,5 +351,40 @@ mod tests {
                 }
             }
         }
+    }
+
+    // ---- overlaps ----
+
+    #[test]
+    fn disjoint_ranges_do_not_overlap() {
+        assert!(!BitRange::new(0, 8).overlaps(BitRange::new(16, 8)));
+    }
+
+    #[test]
+    fn adjacent_ranges_do_not_overlap() {
+        // [0,8) and [8,16) touch at the boundary but share no bit.
+        assert!(!BitRange::new(0, 8).overlaps(BitRange::new(8, 8)));
+    }
+
+    #[test]
+    fn partially_overlapping_ranges_overlap() {
+        assert!(BitRange::new(0, 8).overlaps(BitRange::new(4, 8)));
+    }
+
+    #[test]
+    fn a_range_containing_another_overlaps() {
+        assert!(BitRange::new(0, 32).overlaps(BitRange::new(8, 8)));
+        assert!(BitRange::new(8, 8).overlaps(BitRange::new(0, 32)));
+    }
+
+    #[test]
+    fn identical_ranges_overlap() {
+        assert!(BitRange::new(4, 12).overlaps(BitRange::new(4, 12)));
+    }
+
+    #[test]
+    fn zero_length_range_never_overlaps() {
+        assert!(!BitRange::new(4, 0).overlaps(BitRange::new(0, 32)));
+        assert!(!BitRange::new(4, 0).overlaps(BitRange::new(4, 0)));
     }
 }
