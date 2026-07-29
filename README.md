@@ -5,11 +5,10 @@ network packets at the bit level.
 
 Where Ghidra/Cutter run the abstraction ladder *bytes → meaning* to understand a binary,
 Packet Foundry runs it *meaning → bytes* to build one: you compose protocol layers and fields
-(and, eventually, a drag-and-drop puzzle of bitwise / arithmetic / control-flow "boxes"), and
-the engine lays out offsets and resolves derived fields (checksums, lengths) into bytes. Because
-the byte buffer stays authoritative, any packet — including malformed, truncated, or deliberately
-invalid ones — round-trips losslessly, with diagnostics that *describe* problems rather than
-block them.
+(or a drag-and-drop puzzle of bitwise / arithmetic / control-flow "boxes"), and the engine lays
+out offsets and resolves derived fields (checksums, lengths) into bytes. Because the byte buffer
+stays authoritative, any packet — including malformed, truncated, or deliberately invalid ones —
+round-trips losslessly, with diagnostics that *describe* problems rather than block them.
 
 ## Status: Phase 1 engine, Phase 2 GUI shell underway
 
@@ -18,7 +17,7 @@ block them.
 | `packet-core` | Byte-buffer-authoritative document model: `BitRange`, `Operation` IR, layers/fields, diagnostics, JSON. |
 | `protocol-engine` | Operation evaluator, dependency-ordered resolve, built-in protocols (Ethernet II, IPv4, TCP, UDP, ICMP, raw). |
 | `packet-cli` | `packet-foundry` CLI — assemble packets to JSON. |
-| `desktop` | Tauri + React desktop shell — the same engine crates behind a GUI. A "Build & Inspect" JSON builder/inspector, a "Box Editor" tab (drag `Operation` boxes onto a canvas, nest/reorder/edit them, and evaluate against a scratch buffer via the real engine), and an "Assistant" tab backed by a pluggable LLM helper (OpenAI-compatible, Anthropic, or Google Gemini) that can also generate box trees from a plain-language description. |
+| `desktop` | Tauri + React desktop shell — the same engine crates behind a GUI. A "Build & Inspect" tab with a navigable **semantic workspace** (dive Packet → Layer → Field → Byte → Bit like zooming a map, with breadcrumbs, back/forward history, field editing with undo/redo, and cross-highlighting against a hex rail), a "Box Editor" tab (drag `Operation` boxes onto a canvas, nest/reorder/edit them, and evaluate against a scratch buffer via the real engine), and an "Assistant" tab backed by a pluggable LLM helper (OpenAI-compatible, Anthropic, or Google Gemini) that can also generate box trees from a plain-language description. |
 
 ### Quick start
 
@@ -42,11 +41,32 @@ See [`docs/phase-1-design.md`](docs/phase-1-design.md) for the engine design.
 
 ## Screenshots
 
-**Build & Inspect** — assemble a protocol stack from JSON, inspect the resolved layer/field tree
-and diagnostics. The Build/Inspect split (and every other pane split in the app) is a draggable
-divider — drag it to resize, double-click to reset, size persists across sessions:
+**Build & Inspect — the semantic workspace.** Assemble a protocol stack from JSON, then navigate
+the result the way you'd zoom a map: double-click to *dive* (Packet → Layer → Field → Byte →
+Bit), `Escape` to rise, `Alt+←`/`Alt+→` to walk your focus history, breadcrumbs and the outline
+rail to jump anywhere. A single click selects a field and cross-highlights its exact bytes in the
+hex rail at the bottom (here: IPv4's derived `HeaderChecksum`, `b7 61`). Diagnostics live in
+their own rail and cross-highlight the same way. The Build/Inspect split (and every other pane
+split in the app) is a draggable divider — drag to resize, double-click to reset, size persists:
 
-![Build & Inspect tab](docs/screenshots/build-inspect.png)
+![Build & Inspect: the semantic workspace, dived into the IPv4 layer](docs/screenshots/build-inspect.png)
+
+**Field editing — Structured or Raw, with undo/redo.** Diving into a field shows its range,
+value, and state (plain / derived / pinned), plus an editor: *Structured* mode takes the field's
+natural form (dotted-decimal for `ipv4_addr`, colon-hex for `mac_addr`, decimal for `uint`,
+`0x`-hex for `flags`), *Raw* mode takes hex bytes. Committing a value pins the field
+(derivations recompute around it; a pinned value that disagrees with its own derivation raises a
+diagnostic rather than being silently "fixed"). Every edit is undoable — `Ctrl+Z`/`Ctrl+Shift+Z`
+or the Undo/Redo buttons by the breadcrumbs:
+
+![Field detail with the structured editor](docs/screenshots/workspace-field-edit.png)
+
+**The computation axis.** A derived field's "View derivation →" dives out of the packet's
+*structure* and into its *computation*: the field's `Operation` tree rendered read-only with the
+same box renderer the Box Editor uses. The violet accent marks the axis switch — blue is
+structure, violet is computation:
+
+![A derived field's Operation tree, rendered read-only](docs/screenshots/workspace-derivation.png)
 
 **Box Editor** — drag `Operation` boxes onto a pannable, zoomable canvas (drag empty space to
 pan, scroll to zoom, or use the toolbar's zoom/fit controls); this is the real IPv4 header
@@ -61,7 +81,9 @@ compose like any other box:
 
 ![Loop rendered as a C-block](docs/screenshots/control-flow-block.png)
 
-**Theme** — System/Light/Dark, top-right of the header, persisted across sessions:
+**Theme** — System/Light/Dark, top-right of the header, persisted across sessions. The whole UI
+is built on a CSS design-token palette, so dark mode is a first-class rich dark gray with clearly
+visible borders — not a dimmed afterthought:
 
 ![Dark theme](docs/screenshots/dark-theme.png)
 
