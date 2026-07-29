@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  canEditSubByte,
+  canFlipBit,
+  flipBitInField,
   hasStructuredEditor,
   parseStructuredValue,
   structuredDraftFor,
@@ -42,15 +45,15 @@ describe("structuredDraftFor / parseStructuredValue round-trips", () => {
     const doc = docWithField("2a", field);
     const draft = structuredDraftFor(doc, field);
     expect(draft).toBe("42");
-    expect(parseStructuredValue("uint", draft, 1)).toEqual(new Uint8Array([0x2a]));
+    expect(parseStructuredValue("uint", draft, 8)).toEqual(new Uint8Array([0x2a]));
   });
 
   it("flags: seeds a zero-padded 0x-hex draft matching formatFieldValue's own padding", () => {
     const field: Field = { id: 2, name: "Flags", range: { start_bit: 0, len_bits: 8 }, kind: "flags" };
     const doc = docWithField("01", field);
     expect(structuredDraftFor(doc, field)).toBe("0x01");
-    expect(parseStructuredValue("flags", "0x01", 1)).toEqual(new Uint8Array([0x01]));
-    expect(parseStructuredValue("flags", "01", 1)).toEqual(new Uint8Array([0x01]));
+    expect(parseStructuredValue("flags", "0x01", 8)).toEqual(new Uint8Array([0x01]));
+    expect(parseStructuredValue("flags", "01", 8)).toEqual(new Uint8Array([0x01]));
   });
 
   it("mac_addr: seeds colon-hex and round-trips", () => {
@@ -58,7 +61,7 @@ describe("structuredDraftFor / parseStructuredValue round-trips", () => {
     const doc = docWithField("aabbccddeeff", field);
     const draft = structuredDraftFor(doc, field);
     expect(draft).toBe("aa:bb:cc:dd:ee:ff");
-    expect(parseStructuredValue("mac_addr", draft, 6)).toEqual(new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]));
+    expect(parseStructuredValue("mac_addr", draft, 48)).toEqual(new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]));
   });
 
   it("ipv4_addr: seeds dotted-decimal and round-trips", () => {
@@ -66,7 +69,7 @@ describe("structuredDraftFor / parseStructuredValue round-trips", () => {
     const doc = docWithField("c0a80114", field);
     const draft = structuredDraftFor(doc, field);
     expect(draft).toBe("192.168.1.20");
-    expect(parseStructuredValue("ipv4_addr", draft, 4)).toEqual(new Uint8Array([192, 168, 1, 20]));
+    expect(parseStructuredValue("ipv4_addr", draft, 32)).toEqual(new Uint8Array([192, 168, 1, 20]));
   });
 
   it("returns '' for an out-of-bounds field instead of an error sentinel", () => {
@@ -78,31 +81,113 @@ describe("structuredDraftFor / parseStructuredValue round-trips", () => {
 
 describe("parseStructuredValue validation failures", () => {
   it("uint rejects negatives, decimals, overflow, and empty input", () => {
-    expect(parseStructuredValue("uint", "-1", 1)).toBeNull();
-    expect(parseStructuredValue("uint", "12.5", 1)).toBeNull();
-    expect(parseStructuredValue("uint", "256", 1)).toBeNull();
-    expect(parseStructuredValue("uint", "", 1)).toBeNull();
-    expect(parseStructuredValue("uint", "255", 1)).toEqual(new Uint8Array([255]));
+    expect(parseStructuredValue("uint", "-1", 8)).toBeNull();
+    expect(parseStructuredValue("uint", "12.5", 8)).toBeNull();
+    expect(parseStructuredValue("uint", "256", 8)).toBeNull();
+    expect(parseStructuredValue("uint", "", 8)).toBeNull();
+    expect(parseStructuredValue("uint", "255", 8)).toEqual(new Uint8Array([255]));
   });
 
   it("flags rejects a bare '0x' and non-hex chars", () => {
-    expect(parseStructuredValue("flags", "0x", 1)).toBeNull();
-    expect(parseStructuredValue("flags", "zz", 1)).toBeNull();
-    expect(parseStructuredValue("flags", "0xff", 1)).toEqual(new Uint8Array([0xff]));
+    expect(parseStructuredValue("flags", "0x", 8)).toBeNull();
+    expect(parseStructuredValue("flags", "zz", 8)).toBeNull();
+    expect(parseStructuredValue("flags", "0xff", 8)).toEqual(new Uint8Array([0xff]));
   });
 
   it("mac_addr rejects wrong part count and bad octets", () => {
-    expect(parseStructuredValue("mac_addr", "aa:bb:cc:dd:ee", 6)).toBeNull();
-    expect(parseStructuredValue("mac_addr", "aa:bb:cc:dd:ee:gg", 6)).toBeNull();
+    expect(parseStructuredValue("mac_addr", "aa:bb:cc:dd:ee", 48)).toBeNull();
+    expect(parseStructuredValue("mac_addr", "aa:bb:cc:dd:ee:gg", 48)).toBeNull();
   });
 
   it("ipv4_addr rejects wrong part count and out-of-range octets", () => {
-    expect(parseStructuredValue("ipv4_addr", "192.168.1", 4)).toBeNull();
-    expect(parseStructuredValue("ipv4_addr", "256.0.0.1", 4)).toBeNull();
-    expect(parseStructuredValue("ipv4_addr", "007.0.0.1", 4)).toEqual(new Uint8Array([7, 0, 0, 1]));
+    expect(parseStructuredValue("ipv4_addr", "192.168.1", 32)).toBeNull();
+    expect(parseStructuredValue("ipv4_addr", "256.0.0.1", 32)).toBeNull();
+    expect(parseStructuredValue("ipv4_addr", "007.0.0.1", 32)).toEqual(new Uint8Array([7, 0, 0, 1]));
   });
 
   it("bytes kind has no structured form", () => {
-    expect(parseStructuredValue("bytes", "aabb", 2)).toBeNull();
+    expect(parseStructuredValue("bytes", "aabb", 16)).toBeNull();
+  });
+});
+
+describe("sub-byte fields", () => {
+  it("canEditSubByte allows uint/flags up to 64 bits and nothing else", () => {
+    expect(canEditSubByte("uint", 4)).toBe(true);
+    expect(canEditSubByte("flags", 3)).toBe(true);
+    expect(canEditSubByte("uint", 64)).toBe(true);
+    expect(canEditSubByte("uint", 65)).toBe(false);
+    expect(canEditSubByte("mac_addr", 4)).toBe(false);
+    expect(canEditSubByte("ipv4_addr", 4)).toBe(false);
+    expect(canEditSubByte("bytes", 4)).toBe(false);
+  });
+
+  it("a 4-bit uint packs right-aligned into one byte and rejects overflow", () => {
+    expect(parseStructuredValue("uint", "6", 4)).toEqual(new Uint8Array([0x06]));
+    expect(parseStructuredValue("uint", "15", 4)).toEqual(new Uint8Array([0x0f]));
+    expect(parseStructuredValue("uint", "16", 4)).toBeNull();
+  });
+
+  it("a sub-byte flags value packs the same way", () => {
+    expect(parseStructuredValue("flags", "0x5", 3)).toEqual(new Uint8Array([0x05]));
+    expect(parseStructuredValue("flags", "0x8", 3)).toBeNull();
+  });
+
+  it("a 12-bit uint packs into two ceil bytes", () => {
+    expect(parseStructuredValue("uint", "4095", 12)).toEqual(new Uint8Array([0x0f, 0xff]));
+    expect(parseStructuredValue("uint", "4096", 12)).toBeNull();
+  });
+
+  it("structuredDraftFor seeds a sub-byte uint from its bit range", () => {
+    // The IPv4 Version nibble: high nibble of byte 0 is 4.
+    const field: Field = { id: 2, name: "Version", range: { start_bit: 0, len_bits: 4 }, kind: "uint" };
+    const doc = docWithField("45", field);
+    expect(structuredDraftFor(doc, field)).toBe("4");
+  });
+});
+
+describe("flipBitInField / canFlipBit", () => {
+  it("flips the MSB and LSB of an aligned field", () => {
+    const field: Field = { id: 2, name: "TTL", range: { start_bit: 8, len_bits: 8 }, kind: "uint" };
+    const doc = docWithField("0040ff", field);
+    expect(flipBitInField(doc, field, 8)).toEqual(new Uint8Array([0xc0]));
+    expect(flipBitInField(doc, field, 15)).toEqual(new Uint8Array([0x41]));
+  });
+
+  it("flips within an unaligned nibble, packed right-aligned", () => {
+    const field: Field = { id: 2, name: "Version", range: { start_bit: 0, len_bits: 4 }, kind: "uint" };
+    const doc = docWithField("45", field);
+    // Version is 4 (0100); flipping its second bit (abs bit 1) gives 0 (0000).
+    expect(flipBitInField(doc, field, 1)).toEqual(new Uint8Array([0x00]));
+    // Flipping the LSB (abs bit 3) gives 5.
+    expect(flipBitInField(doc, field, 3)).toEqual(new Uint8Array([0x05]));
+  });
+
+  it("flipping twice round-trips to the original packed value", () => {
+    const field: Field = { id: 2, name: "IHL", range: { start_bit: 4, len_bits: 4 }, kind: "uint" };
+    const doc = docWithField("45", field);
+    const once = flipBitInField(doc, field, 6)!;
+    const flippedDoc = { ...doc, buffer: "47" }; // 0100 0111: bit 6 flipped
+    expect(flipBitInField(flippedDoc, field, 6)).toEqual(new Uint8Array([0x05]));
+    expect(once).toEqual(new Uint8Array([0x07]));
+  });
+
+  it("a bit outside the field returns null", () => {
+    const field: Field = { id: 2, name: "Version", range: { start_bit: 0, len_bits: 4 }, kind: "uint" };
+    const doc = docWithField("45", field);
+    expect(flipBitInField(doc, field, 4)).toBeNull();
+    expect(flipBitInField(doc, field, -1 as number)).toBeNull();
+  });
+
+  it("flipping the MSB of an all-ones unaligned value stays in range", () => {
+    const field: Field = { id: 2, name: "Nib", range: { start_bit: 0, len_bits: 4 }, kind: "uint" };
+    const doc = docWithField("f5", field);
+    expect(flipBitInField(doc, field, 0)).toEqual(new Uint8Array([0x07]));
+  });
+
+  it("canFlipBit: aligned any width, unaligned only within 64 bits", () => {
+    expect(canFlipBit({ start_bit: 0, len_bits: 800 })).toBe(true);
+    expect(canFlipBit({ start_bit: 4, len_bits: 13 })).toBe(true);
+    expect(canFlipBit({ start_bit: 4, len_bits: 64 })).toBe(true);
+    expect(canFlipBit({ start_bit: 4, len_bits: 65 })).toBe(false);
   });
 });

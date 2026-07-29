@@ -71,6 +71,24 @@ pub fn validate(doc: &PacketDocument) -> Vec<Diagnostic> {
         }
     }
 
+    // A pin that apply_overrides can't write (wrong length, over-wide value, out of bounds) is
+    // skipped there rather than failing the resolve — per the document model's "problems surface
+    // as diagnostics, not errors" contract, this is where it surfaces.
+    for layer in &doc.layers {
+        for field in &layer.fields {
+            let Some(pinned) = &field.override_bytes else {
+                continue;
+            };
+            if field.range.check_field_bytes(pinned, doc.buffer.len()).is_err() {
+                diags.push(Diagnostic::warning(
+                    "field.override_unapplied",
+                    format!("field `{}` is pinned to bytes that cannot be applied to its range", field.name),
+                    Some(field.range),
+                ));
+            }
+        }
+    }
+
     // Do the derived bytes actually agree with what the derivation computes?
     for layer in &doc.layers {
         for field in &layer.fields {
@@ -105,6 +123,10 @@ pub fn validate(doc: &PacketDocument) -> Vec<Diagnostic> {
 }
 
 /// Write every pinned override into the buffer (a pin is a fixed input to other derivations).
+/// Byte-aligned pins are raw bytes; sub-byte pins are right-aligned packed values — see
+/// `BitRange::write_field_bytes`. A pin that can't be applied (wrong length, over-wide value,
+/// out of bounds) is skipped rather than failing the resolve — loaded JSON must always resolve,
+/// with the problem surfacing as a `field.override_unapplied` diagnostic from `validate`.
 fn apply_overrides(doc: &mut PacketDocument) -> Result<(), EngineError> {
     let pins: Vec<(BitRange, Vec<u8>)> = doc
         .layers
@@ -117,11 +139,8 @@ fn apply_overrides(doc: &mut PacketDocument) -> Result<(), EngineError> {
         })
         .collect();
     for (range, bytes) in pins {
-        if range.start_bit % 8 == 0 && range.len_bits == bytes.len() * 8 {
-            let end = (range.start_bit + range.len_bits) / 8;
-            if end <= doc.buffer.len() {
-                doc.buffer.write_bytes(range, &bytes)?;
-            }
+        if range.check_field_bytes(&bytes, doc.buffer.len()).is_ok() {
+            doc.buffer.write_field_bytes(range, &bytes)?;
         }
     }
     Ok(())
@@ -344,6 +363,63 @@ mod tests {
 
         let diags = validate(&doc);
         assert!(diags.iter().any(|d| d.code == "field.derivation_mismatch"));
+    }
+
+    #[test]
+    fn sub_byte_pin_applies_and_neighbours_survive() {
+        // A real assembled Ethernet/IPv4 packet: pin the 4-bit IPv4 Version nibble to 6 and
+        // confirm the neighbouring IHL nibble survives and the header checksum re-derives over
+        // the changed byte (a pin is an input to derivations, not exempt from them).
+        use crate::protocols::{ethernet, ipv4};
+        use crate::registry::{ProtocolSpec, assemble};
+
+        let mut doc = assemble(&[
+            ProtocolSpec::Ethernet(ethernet::EthernetParams::default()),
+            ProtocolSpec::Ipv4(ipv4::Ipv4Params::default()),
+        ])
+        .unwrap();
+
+        let version_range = doc.layer("IPv4").unwrap().field("Version").unwrap().range;
+        assert_eq!(version_range.len_bits, 4);
+        let checksum_before = doc.buffer.read_bytes(BitRange::bytes(24, 2)).unwrap();
+
+        doc.layer_by_id_mut(doc.layer("IPv4").unwrap().id)
+            .unwrap()
+            .field_mut("Version")
+            .unwrap()
+            .override_bytes = Some(vec![0x06]);
+        resolve(&mut doc).unwrap();
+
+        assert_eq!(doc.buffer.read_uint(version_range).unwrap(), 6);
+        // IHL, the other nibble of the same byte, is untouched.
+        let ihl_range = doc.layer("IPv4").unwrap().field("IHL").unwrap().range;
+        assert_eq!(doc.buffer.read_uint(ihl_range).unwrap(), 5);
+        // The checksum re-derived over the changed byte...
+        assert_ne!(doc.buffer.read_bytes(BitRange::bytes(24, 2)).unwrap(), checksum_before);
+        // ...so the only expected diagnostic-free state holds: no mismatch, no overlap noise.
+        assert!(doc.diagnostics.is_empty(), "unexpected diagnostics: {:?}", doc.diagnostics);
+    }
+
+    #[test]
+    fn inapplicable_pin_is_skipped_and_flagged() {
+        // 0x10 doesn't fit in a 4-bit field: apply_overrides must skip it (resolve still
+        // succeeds) and validate must surface it as a diagnostic instead.
+        let mut doc = PacketDocument::with_buffer(PacketBuffer::with_len(2));
+        doc.layers.push(Layer::new(
+            "L",
+            BitRange::bytes(0, 2),
+            vec![Field::new("Nib", BitRange::new(0, 4), FieldKind::Uint)],
+        ));
+        doc.layers[0].field_mut("Nib").unwrap().override_bytes = Some(vec![0x10]);
+
+        resolve(&mut doc).unwrap();
+
+        assert_eq!(doc.buffer.read_uint(BitRange::new(0, 4)).unwrap(), 0, "pin must not be applied");
+        assert!(
+            doc.diagnostics.iter().any(|d| d.code == "field.override_unapplied" && d.severity == Severity::Warning),
+            "expected an override-unapplied warning, got {:?}",
+            doc.diagnostics
+        );
     }
 
     #[test]
