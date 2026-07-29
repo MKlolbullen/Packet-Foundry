@@ -68,4 +68,18 @@ describe("rangeOfTarget", () => {
     expect(rangeOfTarget(DOC, { kind: "layer", layerId: "99" })).toBeUndefined();
     expect(rangeOfTarget(DOC, { kind: "field", layerId: "1", fieldId: "99" })).toBeUndefined();
   });
+
+  it("byte resolves to a whole-byte range at its absolute position", () => {
+    expect(rangeOfTarget(DOC, { kind: "byte", byteIndex: 3 })).toEqual({ start_bit: 24, len_bits: 8 });
+  });
+
+  it("bit resolves to a single-bit range at its absolute position", () => {
+    expect(rangeOfTarget(DOC, { kind: "bit", bitIndex: 26 })).toEqual({ start_bit: 26, len_bits: 1 });
+  });
+
+  it("operation has no single meaningful range", () => {
+    expect(
+      rangeOfTarget(DOC, { kind: "operation", layerId: "1", fieldId: "2", operationId: "root" }),
+    ).toBeUndefined();
+  });
 });

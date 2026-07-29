@@ -13,6 +13,9 @@ const PACKET: FocusTarget = { kind: "packet" };
 const LAYER: FocusTarget = { kind: "layer", layerId: "1" };
 const FIELD: FocusTarget = { kind: "field", layerId: "1", fieldId: "2" };
 const OTHER_LAYER: FocusTarget = { kind: "layer", layerId: "5" };
+const BYTE: FocusTarget = { kind: "byte", byteIndex: 3, ownerId: "1:2" };
+const BIT: FocusTarget = { kind: "bit", bitIndex: 26, ownerId: "1:2" };
+const OPERATION: FocusTarget = { kind: "operation", layerId: "1", fieldId: "2", operationId: "root" };
 
 const DOC: PacketDocument = {
   version: 1,
@@ -36,7 +39,7 @@ describe("targetKey", () => {
       targetKey({ kind: "field", layerId: "1", fieldId: "2" }),
       targetKey({ kind: "byte", byteIndex: 3 }),
       targetKey({ kind: "bit", bitIndex: 4 }),
-      targetKey({ kind: "operation", fieldId: "2", operationId: "op1" }),
+      targetKey({ kind: "operation", layerId: "1", fieldId: "2", operationId: "root" }),
     ];
     expect(new Set(keys).size).toBe(keys.length);
   });
@@ -68,6 +71,18 @@ describe("ancestorChain", () => {
   it("includes packet, layer, and field for a field target", () => {
     expect(ancestorChain(FIELD)).toEqual([PACKET, LAYER, FIELD]);
   });
+
+  it("includes packet, layer, field, and byte for a byte target", () => {
+    expect(ancestorChain(BYTE)).toEqual([PACKET, LAYER, FIELD, BYTE]);
+  });
+
+  it("includes packet, layer, field, byte, and bit for a bit target", () => {
+    expect(ancestorChain(BIT)).toEqual([PACKET, LAYER, FIELD, { kind: "byte", byteIndex: 3, ownerId: "1:2" }, BIT]);
+  });
+
+  it("includes packet, layer, and field for an operation target", () => {
+    expect(ancestorChain(OPERATION)).toEqual([PACKET, LAYER, FIELD, OPERATION]);
+  });
 });
 
 describe("focusReducer", () => {
@@ -91,6 +106,50 @@ describe("focusReducer", () => {
     const atRoot = focusReducer(state, { type: "RISE" });
     expect(atRoot.target).toEqual(PACKET);
     expect(atRoot).toBe(state); // no-op returns the same reference
+  });
+
+  it("RISE from a byte parses ownerId back into its owning field", () => {
+    const state = focusReducer(INITIAL_FOCUS_STATE, { type: "DIVE", target: BYTE });
+    const risen = focusReducer(state, { type: "RISE" });
+    expect(risen.target).toEqual({ kind: "field", layerId: "1", fieldId: "2" });
+  });
+
+  it("RISE from a bit computes the containing byte (boundary math: bit 26 -> byte 3)", () => {
+    const state = focusReducer(INITIAL_FOCUS_STATE, { type: "DIVE", target: BIT });
+    const risen = focusReducer(state, { type: "RISE" });
+    expect(risen.target).toEqual({ kind: "byte", byteIndex: 3, ownerId: "1:2" });
+  });
+
+  it("RISE from an operation goes to its owning field", () => {
+    const state = focusReducer(INITIAL_FOCUS_STATE, { type: "DIVE", target: OPERATION });
+    const risen = focusReducer(state, { type: "RISE" });
+    expect(risen.target).toEqual({ kind: "field", layerId: "1", fieldId: "2" });
+  });
+
+  it("RISE from a byte/bit with no ownerId is a no-op", () => {
+    const ownerless: FocusTarget = { kind: "byte", byteIndex: 0 };
+    const state = focusReducer(INITIAL_FOCUS_STATE, { type: "DIVE", target: ownerless });
+    const risen = focusReducer(state, { type: "RISE" });
+    expect(risen).toBe(state);
+  });
+
+  it("a full structure-axis dive (layer -> field -> byte -> bit) round-trips through back/forward", () => {
+    let state = INITIAL_FOCUS_STATE;
+    state = focusReducer(state, { type: "DIVE", target: LAYER });
+    state = focusReducer(state, { type: "DIVE", target: FIELD });
+    state = focusReducer(state, { type: "DIVE", target: BYTE });
+    state = focusReducer(state, { type: "DIVE", target: BIT });
+    const afterDives = state;
+
+    state = focusReducer(state, { type: "BACK" });
+    state = focusReducer(state, { type: "BACK" });
+    state = focusReducer(state, { type: "BACK" });
+    expect(state.target).toEqual(LAYER);
+
+    state = focusReducer(state, { type: "FORWARD" });
+    state = focusReducer(state, { type: "FORWARD" });
+    state = focusReducer(state, { type: "FORWARD" });
+    expect(state.target).toEqual(afterDives.target);
   });
 
   it("several dives, then BACK x2, then FORWARD x2 round-trips exactly", () => {

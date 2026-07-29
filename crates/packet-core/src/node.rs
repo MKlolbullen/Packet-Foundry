@@ -113,4 +113,40 @@ impl Layer {
     pub fn field_mut(&mut self, name: &str) -> Option<&mut Field> {
         self.fields.iter_mut().find(|f| f.name == name)
     }
+
+    /// Find a field by its stable id.
+    pub fn field_by_id(&self, id: NodeId) -> Option<&Field> {
+        self.fields.iter().find(|f| f.id == id)
+    }
+
+    /// Find a field by its stable id, mutably.
+    pub fn field_by_id_mut(&mut self, id: NodeId) -> Option<&mut Field> {
+        self.fields.iter_mut().find(|f| f.id == id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn layer_with_field() -> (Layer, NodeId) {
+        let mut field = Field::new("TTL", BitRange::bytes(8, 1), FieldKind::Uint);
+        field.id = NodeId(42);
+        (Layer::new("IPv4", BitRange::bytes(0, 20), vec![field]), NodeId(42))
+    }
+
+    #[test]
+    fn field_by_id_finds_matching_field() {
+        let (layer, id) = layer_with_field();
+        assert_eq!(layer.field_by_id(id).unwrap().name, "TTL");
+        assert!(layer.field_by_id(NodeId(999)).is_none());
+    }
+
+    #[test]
+    fn field_by_id_mut_finds_matching_field() {
+        let (mut layer, id) = layer_with_field();
+        layer.field_by_id_mut(id).unwrap().name = "Renamed".into();
+        assert_eq!(layer.field_by_id(id).unwrap().name, "Renamed");
+        assert!(layer.field_by_id_mut(NodeId(999)).is_none());
+    }
 }

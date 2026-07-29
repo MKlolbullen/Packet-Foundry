@@ -3,7 +3,13 @@
    nested 2-pane SplitPanes, each carrying its own display:none-collapse footgun and
    active-gated remeasure/storageKey. Side panels aren't user-resizable here; that's an accepted
    trade for this first pass — a later PR can swap in SplitPane/a purpose-built splitter once the
-   panel contents are stable enough to be worth making resizable. */
+   panel contents are stable enough to be worth making resizable.
+
+   Colors throughout this file read from the design tokens defined in ../App.css's `:root` /
+   `:root[data-theme="dark"]` blocks — nothing here redeclares them. The one deliberate new color
+   relationship this file introduces: the computation axis (View derivation → OperationProjection)
+   uses --accent-2 (violet) instead of the default --accent (blue) everywhere else uses, so diving
+   from structure into computation is visually legible, not just another gray box. */
 
 .semantic-workspace {
   display: flex;
@@ -31,10 +37,28 @@
 
 .semantic-workspace-stage {
   min-width: 0;
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.6rem 0.8rem;
   overflow: auto;
+}
+
+.semantic-workspace-stage .fields tr:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--bg-subtle);
+}
+
+/* ---- document undo/redo ---- */
+
+.workspace-history-row {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.doc-history-controls {
+  display: flex;
+  gap: 0.4rem;
 }
 
 /* ---- breadcrumbs ---- */
@@ -53,14 +77,14 @@
 }
 
 .breadcrumb-sep {
-  color: #999;
+  color: var(--text-faint);
 }
 
 .breadcrumb-link {
   background: transparent;
   border: none;
   padding: 0.1em 0.3em;
-  color: #396cd8;
+  color: var(--accent);
   cursor: pointer;
   font-size: 1em;
 }
@@ -75,7 +99,7 @@
 
 .breadcrumb-axis {
   margin-left: auto;
-  color: #888;
+  color: var(--text-faint);
   text-transform: capitalize;
   font-size: 0.85em;
 }
@@ -83,7 +107,7 @@
 /* ---- packet outline ---- */
 
 .packet-outline {
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.5rem;
   overflow: auto;
@@ -110,12 +134,17 @@
 }
 
 .outline-row:hover {
-  background: #f0f0f0;
+  background: var(--bg-subtle);
+}
+
+.outline-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft-bg);
 }
 
 .outline-row.active {
-  background: #dbe8ff;
-  color: #2952a3;
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
   font-weight: 600;
 }
 
@@ -137,15 +166,21 @@
   display: flex;
   align-items: baseline;
   gap: 0.6rem;
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.5em 0.8em;
   cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.overview-row:hover,
+.overview-row:hover {
+  border-color: var(--accent);
+}
+
 .overview-row:focus-visible {
-  border-color: #396cd8;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft-bg);
 }
 
 .overview-row-name {
@@ -154,7 +189,7 @@
 
 .overview-row-count {
   margin-left: auto;
-  color: #888;
+  color: var(--text-faint);
   font-size: 0.85em;
 }
 
@@ -201,7 +236,7 @@
 }
 
 .field-detail dt {
-  color: #888;
+  color: var(--text-faint);
   font-size: 0.85em;
 }
 
@@ -209,10 +244,136 @@
   margin: 0;
 }
 
+/* ---- byte inspector / bit inspector ---- */
+
+.byte-bits {
+  list-style: none;
+  margin: 0.4em 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bit-row {
+  display: flex;
+  gap: 0.6em;
+  padding: 0.2em 0.4em;
+  border-radius: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.bit-row:hover {
+  background: var(--bg-subtle);
+}
+
+.bit-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft-bg);
+}
+
+/* ---- field detail: bytes section + derivation link ---- */
+
+.field-bytes {
+  margin-top: 0.6em;
+}
+
+.field-bytes-label {
+  color: var(--text-faint);
+  font-size: 0.85em;
+  display: block;
+  margin-bottom: 0.3em;
+}
+
+.byte-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.byte-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8em;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15em 0.5em;
+  background: transparent;
+  cursor: pointer;
+}
+
+.byte-chip:hover {
+  border-color: var(--accent);
+}
+
+.byte-chip:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft-bg);
+}
+
+/* ---- field detail: edit section ---- */
+
+/* Byte-aligned fields only (see FieldDetail.tsx) — reuses App.css's .row/.box-input/.hex-input/
+   .error/.hint wholesale rather than inventing new input/button visual language for one form. */
+.field-edit {
+  margin-top: 0.6em;
+}
+
+/* Structured/Raw switch — the pill-toggle *container* is new (App.css's .theme-toggle carries
+   header-bar-specific flex/positioning that would misbehave inline), but the buttons inside
+   reuse App.css's .theme-option/.theme-option.active directly by className, not a clone. */
+.edit-mode-toggle {
+  display: flex;
+  gap: 0.2rem;
+  background: var(--bg-subtle);
+  border-radius: 8px;
+  padding: 0.2rem;
+  width: fit-content;
+  margin-bottom: 0.4em;
+}
+
+/* The gateway into the computation axis — deliberately violet (--accent-2), not the default
+   blue, so it reads as "leaving structure, entering computation" rather than just another action. */
+.view-derivation {
+  margin-top: 0.6em;
+  border-color: var(--accent-2);
+  color: var(--accent-2-soft-text);
+  background: var(--accent-2-soft-bg);
+}
+
+.view-derivation:hover:not(:disabled) {
+  border-color: var(--accent-2);
+  background: var(--accent-2);
+  color: #ffffff;
+}
+
+/* ---- operation projection (computation axis) ---- */
+
+.operation-projection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.operation-projection-header {
+  margin: 0;
+  padding-bottom: 0.4em;
+  border-bottom: 2px solid var(--accent-2);
+  color: var(--accent-2-soft-text);
+  font-weight: 600;
+}
+
+.operation-projection .viewport {
+  min-height: 320px;
+  border-color: var(--accent-2);
+}
+
 /* ---- fallback ---- */
 
 .projection-fallback {
-  color: #888;
+  color: var(--text-faint);
 }
 
 /* ---- hex bit rail ---- */
@@ -222,7 +383,7 @@
   flex-wrap: wrap;
   gap: 2px;
   padding: 0.5rem;
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.8em;
@@ -234,45 +395,18 @@
 }
 
 .hex-byte-selected {
-  background: #dbe8ff;
-  color: #2952a3;
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
 }
 
 .hex-byte-diagnosed {
-  outline: 2px solid #8a5a00;
+  outline: 2px solid var(--warn);
   outline-offset: -1px;
 }
 
 /* ---- diagnostics cross-highlight ---- */
 
 .diagnostic-highlighted {
-  background: #dbe8ff;
+  background: var(--accent-soft-bg);
   border-radius: 4px;
-}
-
-/* ---- dark theme ---- */
-
-:root[data-theme="dark"] .semantic-workspace-stage,
-:root[data-theme="dark"] .packet-outline,
-:root[data-theme="dark"] .overview-row {
-  border-color: #3a3a3a;
-}
-
-:root[data-theme="dark"] .breadcrumb-axis,
-:root[data-theme="dark"] .breadcrumb-sep,
-:root[data-theme="dark"] .overview-row-count,
-:root[data-theme="dark"] .field-detail dt,
-:root[data-theme="dark"] .projection-fallback {
-  color: #999;
-}
-
-:root[data-theme="dark"] .outline-row:hover {
-  background: #262626;
-}
-
-:root[data-theme="dark"] .outline-row.active,
-:root[data-theme="dark"] .hex-byte-selected,
-:root[data-theme="dark"] .diagnostic-highlighted {
-  background: #1e2740;
-  color: #9db4ec;
 }

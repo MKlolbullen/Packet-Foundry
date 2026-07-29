@@ -4,8 +4,32 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color: #0f0f0f;
-  background-color: #f6f6f6;
+  /* ---- design tokens (light) ---- */
+  --bg: #f5f6f8;
+  --bg-panel: #ffffff;
+  --bg-subtle: #eef0f3;
+  --border: #d7dbe3;
+  --accent-border-soft: #c7d7fb;
+  --text: #14151a;
+  --text-muted: #5b6270;
+  --text-faint: #868d9c;
+  --accent: #3b6fe0;
+  --accent-soft-bg: #e5edff;
+  --accent-soft-text: #2952a3;
+  --accent-2: #7c3aed;
+  --accent-2-soft-bg: #ede9fe;
+  --accent-2-soft-text: #6d28d9;
+  --warn: #8a5a00;
+  --warn-bg: #fdecc8;
+  --error: #b3261e;
+  --error-bg: #fbdcd9;
+  --success: #2a7a2a;
+  --cf-accent: #e0b34d;
+  --cf-text: #a07515;
+  --cf-bg: #fff8e8;
+
+  color: var(--text);
+  background-color: var(--bg);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -46,7 +70,7 @@ header {
   font-size: 1.2em;
   line-height: 1;
   padding: 0.4em 0.6em;
-  background: #eee;
+  background: var(--bg-subtle);
   border-radius: 8px;
 }
 
@@ -59,7 +83,7 @@ h1 {
 }
 
 .tagline {
-  color: #666;
+  color: var(--text-muted);
   margin-top: 0.25rem;
 }
 
@@ -68,7 +92,7 @@ h1 {
   display: flex;
   justify-content: flex-end;
   gap: 0.2rem;
-  background: #eee;
+  background: var(--bg-subtle);
   border-radius: 8px;
   padding: 0.2rem;
   height: fit-content;
@@ -80,12 +104,12 @@ h1 {
   border-radius: 6px;
   background: transparent;
   box-shadow: none;
-  color: #555;
+  color: var(--text-muted);
 }
 
 .theme-option.active {
-  background: #ffffff;
-  color: #0f0f0f;
+  background: var(--bg-panel);
+  color: var(--text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
@@ -93,7 +117,8 @@ h1 {
   height: 100%;
   box-sizing: border-box;
   text-align: left;
-  background: #ffffff;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1rem 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
@@ -104,7 +129,7 @@ h1 {
 }
 
 .hint {
-  color: #666;
+  color: var(--text-muted);
   font-size: 0.85em;
   margin-top: -0.5rem;
 }
@@ -115,7 +140,9 @@ h1 {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85em;
   border-radius: 6px;
-  border: 1px solid #d0d0d0;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
   padding: 0.6em;
   resize: vertical;
 }
@@ -133,14 +160,19 @@ button {
   font-size: 0.95em;
   font-weight: 500;
   font-family: inherit;
-  color: #0f0f0f;
-  background-color: #eee;
+  color: var(--text);
+  background-color: var(--bg-subtle);
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 button:hover:not(:disabled) {
-  border-color: #396cd8;
+  border-color: var(--accent);
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft-bg);
 }
 
 button:disabled {
@@ -149,32 +181,32 @@ button:disabled {
 }
 
 .error {
-  color: #b3261e;
+  color: var(--error);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85em;
   white-space: pre-wrap;
 }
 
 .tree-summary {
-  color: #666;
+  color: var(--text-muted);
   font-size: 0.85em;
 }
 
 .layer {
   margin-bottom: 1rem;
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
 
 .layer-name {
-  background: #f0f0f0;
+  background: var(--bg-subtle);
   padding: 0.4em 0.7em;
   font-weight: 600;
 }
 
 .loc {
-  color: #888;
+  color: var(--text-faint);
   font-weight: 400;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85em;
@@ -188,7 +220,7 @@ button:disabled {
 
 .fields td {
   padding: 0.3em 0.7em;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--border);
 }
 
 .field-name {
@@ -202,13 +234,13 @@ button:disabled {
 }
 
 .field-marker {
-  color: #888;
+  color: var(--text-faint);
   font-size: 0.85em;
   white-space: nowrap;
 }
 
 .diagnostics-none {
-  color: #2a7a2a;
+  color: var(--success);
 }
 
 .diagnostics ul {
@@ -234,18 +266,18 @@ button:disabled {
 }
 
 .sev-error .sev-badge {
-  background: #fbdcd9;
-  color: #b3261e;
+  background: var(--error-bg);
+  color: var(--error);
 }
 
 .sev-warning .sev-badge {
-  background: #fdecc8;
-  color: #8a5a00;
+  background: var(--warn-bg);
+  color: var(--warn);
 }
 
 .sev-info .sev-badge {
-  background: #dbe8ff;
-  color: #2952a3;
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
 }
 
 /* ---- tabs ---- */
@@ -265,7 +297,7 @@ button:disabled {
 }
 
 .tab.active {
-  border-bottom-color: #396cd8;
+  border-bottom-color: var(--accent);
   font-weight: 700;
 }
 
@@ -282,7 +314,8 @@ button:disabled {
 }
 
 .modal {
-  background: #ffffff;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1.5rem;
   width: 100%;
@@ -328,31 +361,31 @@ button:disabled {
   overflow-y: auto;
   margin: 0.6rem 0;
   padding: 0.5rem;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
 
 .assistant-message {
   border-radius: 8px;
   padding: 0.5em 0.75em;
-  background: #f2f2f2;
+  background: var(--bg-subtle);
 }
 
 .assistant-message.role-user {
-  background: #e5edfb;
+  background: var(--accent-soft-bg);
   align-self: flex-end;
   max-width: 80%;
 }
 
 .assistant-message.role-assistant {
-  background: #f2f2f2;
+  background: var(--bg-subtle);
   align-self: flex-start;
   max-width: 80%;
 }
 
 .assistant-message.role-system {
   background: transparent;
-  border: 1px dashed #ccc;
+  border: 1px dashed var(--border);
 }
 
 .assistant-role {
@@ -360,7 +393,7 @@ button:disabled {
   font-size: 0.72em;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #888;
+  color: var(--text-faint);
   margin-bottom: 0.2em;
 }
 
@@ -417,7 +450,7 @@ button:disabled {
 .split-pane-divider::after {
   content: "";
   position: absolute;
-  background: #d9d9d9;
+  background: var(--border);
   border-radius: 3px;
   transition: background-color 0.15s;
 }
@@ -438,7 +471,7 @@ button:disabled {
 
 .split-pane-divider:hover::after,
 .split-pane.dragging > .split-pane-divider::after {
-  background: #396cd8;
+  background: var(--accent);
 }
 
 /* ---- box editor ---- */
@@ -461,7 +494,8 @@ button:disabled {
 .palette {
   height: 100%;
   box-sizing: border-box;
-  background: #ffffff;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1rem 1.1rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
@@ -475,7 +509,7 @@ button:disabled {
 .palette h3 {
   font-size: 0.9em;
   margin: 1rem 0 0.4rem;
-  color: #666;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -487,9 +521,9 @@ button:disabled {
 }
 
 .palette-chip {
-  border: 1px solid #c9d6f5;
-  background: #eef2ff;
-  color: #2952a3;
+  border: 1px solid var(--accent-border-soft);
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
   border-radius: 6px;
   padding: 0.3em 0.6em;
   font-size: 0.82em;
@@ -498,16 +532,17 @@ button:disabled {
 }
 
 .palette h3:nth-of-type(2) + .palette-group .palette-chip {
-  border-color: #ddd;
-  background: #f2f2f2;
-  color: #888;
+  border-color: var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-faint);
 }
 
 .canvas {
   height: 100%;
   min-width: 0;
   box-sizing: border-box;
-  background: #ffffff;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1rem 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
@@ -570,7 +605,7 @@ button:disabled {
 
 .zoom-readout {
   font-size: 0.8em;
-  color: #666;
+  color: var(--text-muted);
   min-width: 3.2em;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -579,13 +614,13 @@ button:disabled {
 .toolbar-sep {
   width: 1px;
   align-self: stretch;
-  background: #ddd;
+  background: var(--border);
   margin: 0 0.15em;
 }
 
 .toolbar-feedback {
   font-size: 0.8em;
-  color: #2a7a2a;
+  color: var(--success);
 }
 
 .import-bar {
@@ -605,12 +640,13 @@ button:disabled {
 .viewport {
   position: relative;
   overflow: hidden;
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--border);
   border-radius: 8px;
   min-height: 160px;
   cursor: grab;
-  background-color: #fafafa;
-  background-image: radial-gradient(circle, #d7d7d7 1px, transparent 1px);
+  background-color: var(--bg-subtle);
+  background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+  background-size: 18px 18px;
   touch-action: none;
 }
 
@@ -627,22 +663,22 @@ button:disabled {
 }
 
 .box-node {
-  border: 1px solid #c9d6f5;
+  border: 1px solid var(--accent-border-soft);
   border-radius: 8px;
-  background: #fafbff;
+  background: var(--bg-panel);
   margin: 0.3em 0;
   transition: box-shadow 0.15s, border-color 0.15s;
 }
 
 .box-node.kind-reserved {
-  border-color: #ddd;
-  background: #f5f5f5;
+  border-color: var(--border);
+  background: var(--bg-subtle);
   opacity: 0.85;
 }
 
 .box-node.drag-over {
-  border-color: #396cd8;
-  box-shadow: 0 0 0 2px rgba(57, 108, 216, 0.35);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft-bg);
 }
 
 /* ---- control-flow "C-block" (Loop / If) ----
@@ -651,8 +687,8 @@ button:disabled {
    block visually wraps around what it controls instead of just listing it as another slot. */
 
 .box-node.control-flow {
-  background: #fff8e8;
-  border-color: #e0b34d;
+  background: var(--cf-bg);
+  border-color: var(--cf-accent);
   border-width: 2px;
   padding-bottom: 0.5em;
 }
@@ -679,8 +715,8 @@ button:disabled {
 .cf-rail {
   flex: 0 0 auto;
   width: 0.6em;
-  border-left: 3px solid #e0b34d;
-  border-bottom: 3px solid #e0b34d;
+  border-left: 3px solid var(--cf-accent);
+  border-bottom: 3px solid var(--cf-accent);
   border-radius: 0 0 0 6px;
   margin-right: 0.3em;
 }
@@ -697,14 +733,14 @@ button:disabled {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #a07515;
+  color: var(--cf-text);
   margin-bottom: 0.15em;
 }
 
 .cf-close {
   height: 0.6em;
   margin: 0 0.6em 0 calc(0.6em + 0.9em);
-  border-left: 3px solid #e0b34d;
+  border-left: 3px solid var(--cf-accent);
   border-radius: 0 0 0 6px;
 }
 
@@ -721,29 +757,31 @@ button:disabled {
   font-weight: 700;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85em;
-  color: #2952a3;
+  color: var(--accent-soft-text);
 }
 
 .kind-reserved .box-kind {
-  color: #888;
+  color: var(--text-faint);
 }
 
 .box-reserved-badge {
   font-size: 0.7em;
   text-transform: uppercase;
-  color: #a05a00;
-  background: #fdecc8;
+  color: var(--warn);
+  background: var(--warn-bg);
   border-radius: 4px;
   padding: 0.1em 0.4em;
 }
 
 .param-label {
   font-size: 0.75em;
-  color: #888;
+  color: var(--text-faint);
 }
 
 .box-input {
-  border: 1px solid #d0d0d0;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
   border-radius: 5px;
   padding: 0.2em 0.4em;
   font-size: 0.85em;
@@ -759,17 +797,17 @@ button:disabled {
 }
 
 .box-input.invalid {
-  border-color: #b3261e;
-  outline: 1px solid #b3261e;
+  border-color: var(--error);
+  outline: 1px solid var(--error);
 }
 
 .box-children {
   padding: 0.2em 0.6em 0.5em 1.4em;
-  border-top: 1px dashed #dfe6f7;
+  border-top: 1px dashed var(--accent-border-soft);
 }
 
 .kind-reserved > .box-children {
-  border-top-color: #e2e2e2;
+  border-top-color: var(--border);
 }
 
 .fixed-slot {
@@ -779,7 +817,7 @@ button:disabled {
 .slot-label {
   display: block;
   font-size: 0.7em;
-  color: #888;
+  color: var(--text-faint);
   margin-bottom: 0.15em;
 }
 
@@ -804,18 +842,18 @@ button:disabled {
 }
 
 .append-zone {
-  border: 1px dashed #c9d6f5;
+  border: 1px dashed var(--accent-border-soft);
   border-radius: 6px;
   padding: 0.4em 0.7em;
   font-size: 0.78em;
-  color: #888;
+  color: var(--text-faint);
   text-align: center;
 }
 
 .append-zone.drag-over {
-  border-color: #396cd8;
-  color: #396cd8;
-  background: rgba(57, 108, 216, 0.08);
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft-bg);
 }
 
 .evaluate-bar {
@@ -837,175 +875,43 @@ button:disabled {
 
 /* Theme: driven entirely by the `data-theme` attribute App.tsx stamps onto <html> (see
    theme.ts) — "system" resolves to one of these at runtime via matchMedia, so no
-   `@media (prefers-color-scheme)` fallback is needed here. */
+   `@media (prefers-color-scheme)` fallback is needed here.
+
+   Re-declaring the same custom property names here is the whole mechanism: every rule above
+   reads a `var(--token)`, so most of what used to be a long list of per-component dark-mode
+   recolors now "just works" the moment the token itself flips — this block only needs to keep
+   the handful of rules that aren't pure recolors (alpha-blended button background, the viewport's
+   radial-gradient dot). A dark gray background with clearly visible, cooler-toned borders and a
+   brighter, more saturated accent blue is the deliberate "flashy dark gray" look. */
 
 :root[data-theme="dark"] {
-  color: #f6f6f6;
-  background-color: #2f2f2f;
+  --bg: #1b1d21;
+  --bg-panel: #232630;
+  --bg-subtle: #2a2e39;
+  --border: #3a3f4c;
+  --accent-border-soft: #3d4a7a;
+  --text: #f0f1f5;
+  --text-muted: #a6acbb;
+  --text-faint: #7d8494;
+  --accent: #5b8fff;
+  --accent-soft-bg: #202a4a;
+  --accent-soft-text: #a9c2ff;
+  --accent-2: #a78bfa;
+  --accent-2-soft-bg: #2c2350;
+  --accent-2-soft-text: #cbb8fb;
+  --warn: #f0c674;
+  --warn-bg: #3d2e10;
+  --error: #ff6b6b;
+  --error-bg: #3a1f1f;
+  --success: #4ade80;
+  --cf-accent: #caa14d;
+  --cf-text: #e8c374;
+  --cf-bg: #2e2410;
 }
 
-:root[data-theme="dark"] .pane {
-  background: #262626;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-}
-
-:root[data-theme="dark"] .layer {
-  border-color: #3a3a3a;
-}
-
-:root[data-theme="dark"] .layer-name {
-  background: #1f1f1f;
-}
-
-:root[data-theme="dark"] .fields td {
-  border-top-color: #3a3a3a;
-}
-
-:root[data-theme="dark"] .json-editor {
-  background: #1c1c1c;
-  color: #f6f6f6;
-  border-color: #444;
-}
-
-:root[data-theme="dark"] button {
-  color: #ffffff;
-  background-color: #0f0f0f98;
-}
-
-:root[data-theme="dark"] .tagline,
-:root[data-theme="dark"] .hint,
-:root[data-theme="dark"] .loc,
-:root[data-theme="dark"] .field-marker {
-  color: #aaa;
-}
-
-:root[data-theme="dark"] .palette,
-:root[data-theme="dark"] .canvas {
-  background: #262626;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-}
-
-:root[data-theme="dark"] .palette h3 {
-  color: #aaa;
-}
-
-:root[data-theme="dark"] .box-node {
-  background: #20242e;
-  border-color: #35406b;
-}
-
-:root[data-theme="dark"] .box-node.kind-reserved {
-  background: #232323;
-  border-color: #3a3a3a;
-}
-
-:root[data-theme="dark"] .box-node.control-flow {
-  background: #241d10;
-  border-color: #6b4f1f;
-}
-
-:root[data-theme="dark"] .box-children {
-  border-top-color: #2c3350;
-}
-
-:root[data-theme="dark"] .cf-rail,
-:root[data-theme="dark"] .cf-close {
-  border-color: #6b4f1f;
-}
-
-:root[data-theme="dark"] .cf-caption {
-  color: #d9b25c;
-}
-
-:root[data-theme="dark"] .box-input {
-  background: #1c1c1c;
-  color: #f6f6f6;
-  border-color: #444;
-}
-
-:root[data-theme="dark"] .palette-chip {
-  background: #1e2740;
-  border-color: #35406b;
-  color: #9db4ec;
-}
-
-:root[data-theme="dark"] .append-zone {
-  border-color: #35406b;
-  color: #888;
-}
-
-:root[data-theme="dark"] .slot-label,
-:root[data-theme="dark"] .param-label {
-  color: #999;
-}
-
-:root[data-theme="dark"] .viewport {
-  background-color: #1b1e26;
-  border-color: #3a3a3a;
-  background-image: radial-gradient(circle, #3a3f4c 1px, transparent 1px);
-}
-
-:root[data-theme="dark"] .zoom-readout,
-:root[data-theme="dark"] .hint {
-  color: #aaa;
-}
-
-:root[data-theme="dark"] .toolbar-sep {
-  background: #444;
-}
-
-:root[data-theme="dark"] .theme-toggle {
-  background: #1c1c1c;
-}
-
-:root[data-theme="dark"] .theme-option {
-  color: #ccc;
-}
-
+/* The active theme pill needs to read as *raised* above the toggle's own --bg-subtle track, so
+   it gets a dedicated shade one step lighter than --bg-subtle rather than the (darker, in dark
+   mode) --bg-panel the light theme can get away with reusing. */
 :root[data-theme="dark"] .theme-option.active {
-  background: #3a3a3a;
-  color: #ffffff;
-}
-
-:root[data-theme="dark"] .split-pane-divider::after {
-  background: #444;
-}
-
-:root[data-theme="dark"] .settings-button {
-  background: #1c1c1c;
-  color: #fff;
-}
-
-:root[data-theme="dark"] .modal {
-  background: #262626;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-}
-
-:root[data-theme="dark"] .assistant-messages {
-  border-color: #3a3a3a;
-}
-
-:root[data-theme="dark"] .assistant-message {
-  background: #1f1f1f;
-}
-
-:root[data-theme="dark"] .assistant-message.role-user {
-  background: #1e2740;
-}
-
-:root[data-theme="dark"] .assistant-message.role-assistant {
-  background: #1f1f1f;
-}
-
-:root[data-theme="dark"] .assistant-message.role-system {
-  border-color: #444;
-}
-
-:root[data-theme="dark"] .assistant-role {
-  color: #999;
-}
-
-:root[data-theme="dark"] .split-pane-divider:hover::after,
-:root[data-theme="dark"] .split-pane.dragging > .split-pane-divider::after {
-  background: #5b8def;
+  background: #363b48;
 }

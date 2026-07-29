@@ -14,9 +14,10 @@ export function overlaps(a: BitRange, b: BitRange): boolean {
 }
 
 /** The BitRange a given focus target occupies, or undefined if it has none (unknown id, or a
- * kind this PR doesn't reach yet). Deliberately decode-free — derives the packet's byte length
- * from the hex string's length rather than importing hexToBytes; callers that already have
- * decoded bytes in scope can pass a byte count in directly instead. */
+ * kind with no single meaningful range — an operation tree isn't one contiguous range, so it
+ * doesn't participate in cross-highlighting). Deliberately decode-free for `packet` — derives
+ * the packet's byte length from the hex string's length rather than importing hexToBytes;
+ * callers that already have decoded bytes in scope can pass a byte count in directly instead. */
 export function rangeOfTarget(doc: PacketDocument, target: FocusTarget): BitRange | undefined {
   switch (target.kind) {
     case "packet": {
@@ -28,7 +29,9 @@ export function rangeOfTarget(doc: PacketDocument, target: FocusTarget): BitRang
     case "field":
       return findField(doc, target.layerId, target.fieldId)?.range;
     case "byte":
+      return { start_bit: target.byteIndex * 8, len_bits: 8 };
     case "bit":
+      return { start_bit: target.bitIndex, len_bits: 1 };
     case "operation":
       return undefined;
   }

@@ -16,10 +16,13 @@ import { PALETTE_KIND_MIME, SUBTREE_JSON_MIME } from "./dnd";
 export interface BoxNodeProps {
   op: Operation;
   path: number[];
-  onChange: (path: number[], newOp: Operation) => void;
-  onInsert: (parentPath: number[], index: number, newOp: Operation) => void;
-  onRemoveItem: (path: number[]) => void;
-  onMoveItem: (path: number[], direction: -1 | 1) => void;
+  /** Renders the tree for viewing only — no drag/drop, no param inputs, no list controls. Used
+   * by the workspace's read-only computation-axis view. Defaults to false. */
+  readOnly?: boolean;
+  onChange?: (path: number[], newOp: Operation) => void;
+  onInsert?: (parentPath: number[], index: number, newOp: Operation) => void;
+  onRemoveItem?: (path: number[]) => void;
+  onMoveItem?: (path: number[], direction: -1 | 1) => void;
 }
 
 function readDraggedOperation(e: DragEvent): Operation | null {
@@ -41,7 +44,15 @@ function acceptsDrop(e: DragEvent): boolean {
 
 /** A hex-bytes field that only pushes upward once the text parses cleanly, so mid-edit states
  * (odd digit count, stray characters) don't fight the caller's Operation. */
-function HexBytesField({ value, onCommit }: { value: number[]; onCommit: (bytes: number[]) => void }) {
+function HexBytesField({
+  value,
+  onCommit,
+  disabled,
+}: {
+  value: number[];
+  onCommit: (bytes: number[]) => void;
+  disabled?: boolean;
+}) {
   const [text, setText] = useState(bytesToHex(value));
   const parsed = hexToBytesArray(text);
   const valid = text.trim() === "" ? true : parsed.length > 0 || text.trim().replace(/\s+/g, "") === "";
@@ -50,6 +61,7 @@ function HexBytesField({ value, onCommit }: { value: number[]; onCommit: (bytes:
       className={`box-input hex-input${valid ? "" : " invalid"}`}
       value={text}
       placeholder="hex bytes, e.g. deadbeef"
+      disabled={disabled}
       onChange={(e) => {
         const next = e.currentTarget.value;
         setText(next);
@@ -61,13 +73,24 @@ function HexBytesField({ value, onCommit }: { value: number[]; onCommit: (bytes:
   );
 }
 
-function NumberField({ value, onCommit, min = 0 }: { value: number; onCommit: (v: number) => void; min?: number }) {
+function NumberField({
+  value,
+  onCommit,
+  min = 0,
+  disabled,
+}: {
+  value: number;
+  onCommit: (v: number) => void;
+  min?: number;
+  disabled?: boolean;
+}) {
   return (
     <input
       className="box-input number-input"
       type="number"
       min={min}
       value={value}
+      disabled={disabled}
       onChange={(e) => {
         const v = e.currentTarget.valueAsNumber;
         if (!Number.isNaN(v)) onCommit(Math.max(min, Math.trunc(v)));
@@ -76,26 +99,51 @@ function NumberField({ value, onCommit, min = 0 }: { value: number; onCommit: (v
   );
 }
 
-function TextField({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+function TextField({
+  value,
+  onCommit,
+  disabled,
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  disabled?: boolean;
+}) {
   return (
-    <input className="box-input" value={value} onChange={(e) => onCommit(e.currentTarget.value)} />
+    <input className="box-input" value={value} disabled={disabled} onChange={(e) => onCommit(e.currentTarget.value)} />
   );
 }
 
 /** Kind-specific scalar parameter inputs — every leaf field an `Operation` variant carries that
- * isn't itself a child operation (bytes, ranges, widths, shift amounts, box/function names). */
-function ParamInputs({ op, onChange }: { op: Operation; onChange: (newOp: Operation) => void }) {
+ * isn't itself a child operation (bytes, ranges, widths, shift amounts, box/function names).
+ * When `disabled`, the real values still render but every input is inert. */
+function ParamInputs({
+  op,
+  onChange,
+  disabled,
+}: {
+  op: Operation;
+  onChange: (newOp: Operation) => void;
+  disabled?: boolean;
+}) {
   if ("Const" in op) {
-    return <HexBytesField value={op.Const} onCommit={(bytes) => onChange({ Const: bytes })} />;
+    return <HexBytesField value={op.Const} onCommit={(bytes) => onChange({ Const: bytes })} disabled={disabled} />;
   }
   if ("ReadRange" in op) {
     const { start_bit, len_bits } = op.ReadRange;
     return (
       <>
         <label className="param-label">start bit</label>
-        <NumberField value={start_bit} onCommit={(v) => onChange({ ReadRange: { start_bit: v, len_bits } })} />
+        <NumberField
+          value={start_bit}
+          onCommit={(v) => onChange({ ReadRange: { start_bit: v, len_bits } })}
+          disabled={disabled}
+        />
         <label className="param-label">len bits</label>
-        <NumberField value={len_bits} onCommit={(v) => onChange({ ReadRange: { start_bit, len_bits: v } })} />
+        <NumberField
+          value={len_bits}
+          onCommit={(v) => onChange({ ReadRange: { start_bit, len_bits: v } })}
+          disabled={disabled}
+        />
       </>
     );
   }
@@ -103,7 +151,11 @@ function ParamInputs({ op, onChange }: { op: Operation; onChange: (newOp: Operat
     return (
       <>
         <label className="param-label">from byte</label>
-        <NumberField value={op.ReadFrom.from_byte} onCommit={(v) => onChange({ ReadFrom: { from_byte: v } })} />
+        <NumberField
+          value={op.ReadFrom.from_byte}
+          onCommit={(v) => onChange({ ReadFrom: { from_byte: v } })}
+          disabled={disabled}
+        />
       </>
     );
   }
@@ -112,9 +164,17 @@ function ParamInputs({ op, onChange }: { op: Operation; onChange: (newOp: Operat
     return (
       <>
         <label className="param-label">from byte</label>
-        <NumberField value={from_byte} onCommit={(v) => onChange({ ByteLength: { from_byte: v, width } })} />
+        <NumberField
+          value={from_byte}
+          onCommit={(v) => onChange({ ByteLength: { from_byte: v, width } })}
+          disabled={disabled}
+        />
         <label className="param-label">width</label>
-        <NumberField value={width} onCommit={(v) => onChange({ ByteLength: { from_byte, width: v } })} />
+        <NumberField
+          value={width}
+          onCommit={(v) => onChange({ ByteLength: { from_byte, width: v } })}
+          disabled={disabled}
+        />
       </>
     );
   }
@@ -122,7 +182,7 @@ function ParamInputs({ op, onChange }: { op: Operation; onChange: (newOp: Operat
     return (
       <>
         <label className="param-label">bits</label>
-        <NumberField value={op.Shl[1]} onCommit={(v) => onChange({ Shl: [op.Shl[0], v] })} />
+        <NumberField value={op.Shl[1]} onCommit={(v) => onChange({ Shl: [op.Shl[0], v] })} disabled={disabled} />
       </>
     );
   }
@@ -130,7 +190,7 @@ function ParamInputs({ op, onChange }: { op: Operation; onChange: (newOp: Operat
     return (
       <>
         <label className="param-label">bits</label>
-        <NumberField value={op.Shr[1]} onCommit={(v) => onChange({ Shr: [op.Shr[0], v] })} />
+        <NumberField value={op.Shr[1]} onCommit={(v) => onChange({ Shr: [op.Shr[0], v] })} disabled={disabled} />
       </>
     );
   }
@@ -141,6 +201,7 @@ function ParamInputs({ op, onChange }: { op: Operation; onChange: (newOp: Operat
         <TextField
           value={op.Composite.name}
           onCommit={(name) => onChange({ Composite: { name, body: op.Composite.body } })}
+          disabled={disabled}
         />
       </>
     );
@@ -149,14 +210,22 @@ function ParamInputs({ op, onChange }: { op: Operation; onChange: (newOp: Operat
     return (
       <>
         <label className="param-label">name</label>
-        <TextField value={op.Call.name} onCommit={(name) => onChange({ Call: { name } })} />
+        <TextField value={op.Call.name} onCommit={(name) => onChange({ Call: { name } })} disabled={disabled} />
       </>
     );
   }
   return null;
 }
 
-export default function BoxNode({ op, path, onChange, onInsert, onRemoveItem, onMoveItem }: BoxNodeProps) {
+export default function BoxNode({
+  op,
+  path,
+  readOnly = false,
+  onChange,
+  onInsert,
+  onRemoveItem,
+  onMoveItem,
+}: BoxNodeProps) {
   const [dragOver, setDragOver] = useState(false);
   const [appendDragOver, setAppendDragOver] = useState(false);
   const kind = opKind(op);
@@ -171,7 +240,7 @@ export default function BoxNode({ op, path, onChange, onInsert, onRemoveItem, on
     e.stopPropagation();
     setDragOver(false);
     const dropped = readDraggedOperation(e);
-    if (dropped) onChange(path, dropped);
+    if (dropped) onChange?.(path, dropped);
   }
 
   function handleAppendDrop(e: DragEvent) {
@@ -180,7 +249,7 @@ export default function BoxNode({ op, path, onChange, onInsert, onRemoveItem, on
     e.stopPropagation();
     setAppendDragOver(false);
     const dropped = readDraggedOperation(e);
-    if (dropped) onInsert(path, children.length, dropped);
+    if (dropped) onInsert?.(path, children.length, dropped);
   }
 
   function childAt(index: number) {
@@ -188,6 +257,7 @@ export default function BoxNode({ op, path, onChange, onInsert, onRemoveItem, on
       <BoxNode
         op={children[index]}
         path={[...path, index]}
+        readOnly={readOnly}
         onChange={onChange}
         onInsert={onInsert}
         onRemoveItem={onRemoveItem}
@@ -197,28 +267,34 @@ export default function BoxNode({ op, path, onChange, onInsert, onRemoveItem, on
   }
 
   const containerClass = `box-node kind-${reserved ? "reserved" : "primitive"}${layout ? " control-flow" : ""}${dragOver ? " drag-over" : ""}`;
-  const containerHandlers = {
-    onDragOver: (e: DragEvent) => {
-      if (acceptsDrop(e)) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    },
-    onDragEnter: (e: DragEvent) => {
-      if (acceptsDrop(e)) setDragOver(true);
-    },
-    onDragLeave: () => setDragOver(false),
-    onDrop: handleDrop,
-  };
+  const containerHandlers = readOnly
+    ? {}
+    : {
+        onDragOver: (e: DragEvent) => {
+          if (acceptsDrop(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        },
+        onDragEnter: (e: DragEvent) => {
+          if (acceptsDrop(e)) setDragOver(true);
+        },
+        onDragLeave: () => setDragOver(false),
+        onDrop: handleDrop,
+      };
   function header(extraClass: string, content?: ReactNode) {
     return (
       <div
         className={`box-header${extraClass}`}
-        draggable
-        onDragStart={(e: DragEvent) => {
-          e.dataTransfer.setData(SUBTREE_JSON_MIME, JSON.stringify(op));
-          e.dataTransfer.effectAllowed = "copy";
-        }}
+        draggable={!readOnly}
+        onDragStart={
+          readOnly
+            ? undefined
+            : (e: DragEvent) => {
+                e.dataTransfer.setData(SUBTREE_JSON_MIME, JSON.stringify(op));
+                e.dataTransfer.effectAllowed = "copy";
+              }
+        }
       >
         <span className="box-kind">{kind}</span>
         {reserved && <span className="box-reserved-badge">reserved</span>}
@@ -262,52 +338,63 @@ export default function BoxNode({ op, path, onChange, onInsert, onRemoveItem, on
 
   return (
     <div className={containerClass} {...containerHandlers}>
-      {header("", <ParamInputs op={op} onChange={(newOp) => onChange(path, newOp)} />)}
+      {header(
+        "",
+        <ParamInputs
+          op={op}
+          onChange={readOnly ? () => {} : (newOp) => onChange?.(path, newOp)}
+          disabled={readOnly}
+        />,
+      )}
 
       {labels === "list" && (
         <div className="box-children list">
           {children.map((_, i) => (
             <div className="list-item" key={i}>
-              <div className="list-item-controls">
-                <button
-                  type="button"
-                  title="Move up"
-                  disabled={i === 0}
-                  onClick={() => onMoveItem([...path, i], -1)}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  title="Move down"
-                  disabled={i === children.length - 1}
-                  onClick={() => onMoveItem([...path, i], 1)}
-                >
-                  ↓
-                </button>
-                <button type="button" title="Remove" onClick={() => onRemoveItem([...path, i])}>
-                  ×
-                </button>
-              </div>
+              {!readOnly && (
+                <div className="list-item-controls">
+                  <button
+                    type="button"
+                    title="Move up"
+                    disabled={i === 0}
+                    onClick={() => onMoveItem?.([...path, i], -1)}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    title="Move down"
+                    disabled={i === children.length - 1}
+                    onClick={() => onMoveItem?.([...path, i], 1)}
+                  >
+                    ↓
+                  </button>
+                  <button type="button" title="Remove" onClick={() => onRemoveItem?.([...path, i])}>
+                    ×
+                  </button>
+                </div>
+              )}
               {childAt(i)}
             </div>
           ))}
-          <div
-            className={`append-zone${appendDragOver ? " drag-over" : ""}`}
-            onDragOver={(e) => {
-              if (acceptsDrop(e)) {
-                e.preventDefault();
-                e.stopPropagation();
-              }
-            }}
-            onDragEnter={(e) => {
-              if (acceptsDrop(e)) setAppendDragOver(true);
-            }}
-            onDragLeave={() => setAppendDragOver(false)}
-            onDrop={handleAppendDrop}
-          >
-            + drop a box here to append
-          </div>
+          {!readOnly && (
+            <div
+              className={`append-zone${appendDragOver ? " drag-over" : ""}`}
+              onDragOver={(e) => {
+                if (acceptsDrop(e)) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
+              onDragEnter={(e) => {
+                if (acceptsDrop(e)) setAppendDragOver(true);
+              }}
+              onDragLeave={() => setAppendDragOver(false)}
+              onDrop={handleAppendDrop}
+            >
+              + drop a box here to append
+            </div>
+          )}
         </div>
       )}
 

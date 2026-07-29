@@ -4,8 +4,8 @@
 
 mod llm;
 
-use packet_core::{Operation, PacketBuffer, PacketDocument};
-use protocol_engine::{ProtocolSpec, assemble, evaluate, validate};
+use packet_core::{NodeId, Operation, PacketBuffer, PacketDocument};
+use protocol_engine::{ProtocolSpec, assemble, evaluate, resolve, validate};
 
 /// A protocol stack that assembles a valid Ethernet/IPv4/TCP SYN — the same packet the CLI's
 /// README quick start builds. Used to seed the UI with something real to look at.
@@ -55,6 +55,53 @@ fn evaluate_operation(op: Operation, buffer_hex: String) -> Result<String, Strin
     evaluate(&op, &buffer).map(|out| hex::encode(out)).map_err(|e| e.to_string())
 }
 
+/// Pin a byte-aligned field to an explicit value and re-resolve — the workspace's "edit bytes"
+/// action. Rejects anything `resolve()`'s own override-application step would otherwise silently
+/// skip (unaligned start, length mismatch, out-of-bounds) so a bad edit surfaces as an error
+/// instead of silently not applying.
+#[tauri::command]
+fn set_field_bytes(
+    mut document: PacketDocument,
+    layer_id: u64,
+    field_id: u64,
+    bytes_hex: String,
+) -> Result<PacketDocument, String> {
+    let bytes = hex::decode(bytes_hex.trim()).map_err(|e| e.to_string())?;
+    let buffer_len = document.buffer.len();
+    let field = document
+        .field_by_id_mut(NodeId(layer_id), NodeId(field_id))
+        .ok_or("field not found")?;
+    let range = field.range;
+    if range.start_bit % 8 != 0 || range.len_bits % 8 != 0 {
+        return Err("field is not byte-aligned; bit-level editing isn't supported yet".into());
+    }
+    if bytes.len() * 8 != range.len_bits {
+        return Err(format!("expected {} bytes, got {}", range.len_bits / 8, bytes.len()));
+    }
+    if (range.start_bit + range.len_bits) / 8 > buffer_len {
+        return Err("field range is out of bounds for this document's buffer".into());
+    }
+    field.override_bytes = Some(bytes);
+    resolve(&mut document).map_err(|e| e.to_string())?;
+    Ok(document)
+}
+
+/// Un-pin a field, letting its derivation (if any) resume computing its bytes on the next
+/// resolve. A no-op re-resolve if the field wasn't pinned.
+#[tauri::command]
+fn clear_field_override(
+    mut document: PacketDocument,
+    layer_id: u64,
+    field_id: u64,
+) -> Result<PacketDocument, String> {
+    document
+        .field_by_id_mut(NodeId(layer_id), NodeId(field_id))
+        .ok_or("field not found")?
+        .override_bytes = None;
+    resolve(&mut document).map_err(|e| e.to_string())?;
+    Ok(document)
+}
+
 /// Load the persisted LLM provider settings (API key included) for the settings panel to
 /// pre-fill.
 #[tauri::command]
@@ -95,6 +142,8 @@ pub fn run() {
             create_packet,
             inspect_packet,
             evaluate_operation,
+            set_field_bytes,
+            clear_field_override,
             get_llm_settings,
             save_llm_settings,
             llm_chat,
