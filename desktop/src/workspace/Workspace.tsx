@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PacketDocument, ProtocolSpec } from "../types";
 import { formatFieldValue, hexToBytes, locationString } from "../packet";
@@ -9,7 +9,19 @@ import SemanticStage from "./SemanticStage";
 import DiagnosticsPanel from "./DiagnosticsPanel";
 import HexBitRail from "./HexBitRail";
 import { WorkspaceProvider, useWorkspace } from "./WorkspaceContext";
+import { INITIAL_DOCUMENT_HISTORY, documentHistoryReducer } from "./documentHistory";
 import "./workspace.css";
+
+/** Document-mutation state and actions, grouped into one prop — these all move together (they
+ * all touch the same undo/redo stack), the same way camera navigation callbacks already come
+ * bundled through useWorkspace()'s WorkspaceApi rather than as loose props. */
+interface DocumentEditApi {
+  onDocumentChange: (document: PacketDocument) => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
+}
 
 // The Inspect pane's document view — kept as the old flat, non-navigable tree this PR (paste a
 // document's JSON, see its layers/fields/diagnostics). Not re-plumbed through WorkspaceContext:
@@ -56,17 +68,33 @@ function InspectPacketTree({ doc }: { doc: PacketDocument }) {
 function SemanticWorkspace({
   doc,
   active,
-  onDocumentChange,
+  edit,
 }: {
   doc: PacketDocument | null;
   active: boolean;
-  onDocumentChange: (document: PacketDocument) => void;
+  edit: DocumentEditApi;
 }) {
   const { camera, dive, jump, rise, back, forward, selectRange } = useWorkspace();
 
   useEffect(() => {
     if (!active) return;
     function onKeyDown(e: KeyboardEvent) {
+      const target = e.target;
+      const isTextEntry = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+      // Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z (and +Y as an alternate redo) drive document undo/redo —
+      // gated off text-entry targets so native browser undo still wins inside the stack/inspect
+      // JSON textareas and FieldDetail's hex-edit input, instead of being hijacked.
+      if (!isTextEntry && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) edit.onRedo();
+        else edit.onUndo();
+        return;
+      }
+      if (!isTextEntry && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        edit.onRedo();
+        return;
+      }
       if (e.key === "Escape") {
         rise();
       } else if (e.altKey && e.key === "ArrowLeft") {
@@ -77,7 +105,7 @@ function SemanticWorkspace({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, rise, back, forward]);
+  }, [active, rise, back, forward, edit]);
 
   if (!doc) {
     return <p className="hint">Assemble a stack to explore it here.</p>;
@@ -85,7 +113,17 @@ function SemanticWorkspace({
 
   return (
     <div className="semantic-workspace">
-      <Breadcrumbs document={doc} camera={camera} onJump={jump} />
+      <div className="row workspace-history-row">
+        <Breadcrumbs document={doc} camera={camera} onJump={jump} />
+        <div className="doc-history-controls">
+          <button onClick={edit.onUndo} disabled={!edit.canUndo} title="Undo (Ctrl+Z)">
+            ↶ Undo
+          </button>
+          <button onClick={edit.onRedo} disabled={!edit.canRedo} title="Redo (Ctrl+Shift+Z)">
+            ↷ Redo
+          </button>
+        </div>
+      </div>
       <div className="semantic-workspace-grid">
         <PacketOutline document={doc} focus={camera.target} onJump={jump} />
         <div className="semantic-workspace-stage">
@@ -95,7 +133,7 @@ function SemanticWorkspace({
             selection={camera.selectedRange ? { source: camera.target, range: camera.selectedRange } : undefined}
             onDive={dive}
             onSelect={(selection) => selectRange(selection.range)}
-            onDocumentChange={onDocumentChange}
+            onDocumentChange={edit.onDocumentChange}
           />
         </div>
         <div className="workspace-diagnostics">
@@ -109,17 +147,29 @@ function SemanticWorkspace({
 
 export default function Workspace({ active }: { active: boolean }) {
   const [stackText, setStackText] = useState("");
-  const [doc, setDoc] = useState<PacketDocument | null>(null);
+  const [docState, dispatchDoc] = useReducer(documentHistoryReducer, INITIAL_DOCUMENT_HISTORY);
+  const doc = docState.current;
   const [error, setError] = useState<string | null>(null);
 
   const [inspectText, setInspectText] = useState("");
   const [inspectDoc, setInspectDoc] = useState<PacketDocument | null>(null);
   const [inspectError, setInspectError] = useState<string | null>(null);
 
+  const edit = useMemo<DocumentEditApi>(
+    () => ({
+      onDocumentChange: (document) => dispatchDoc({ type: "MUTATE", document }),
+      canUndo: docState.undoStack.length > 0,
+      canRedo: docState.redoStack.length > 0,
+      onUndo: () => dispatchDoc({ type: "UNDO" }),
+      onRedo: () => dispatchDoc({ type: "REDO" }),
+    }),
+    [docState],
+  );
+
   async function assemble(protocols: ProtocolSpec[]) {
     try {
       const built = await invoke<PacketDocument>("create_packet", { protocols });
-      setDoc(built);
+      dispatchDoc({ type: "SET", document: built });
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -184,7 +234,7 @@ export default function Workspace({ active }: { active: boolean }) {
           </div>
           {error && <p className="error">{error}</p>}
           <WorkspaceProvider>
-            <SemanticWorkspace doc={doc} active={active} onDocumentChange={setDoc} />
+            <SemanticWorkspace doc={doc} active={active} edit={edit} />
           </WorkspaceProvider>
         </section>
       }

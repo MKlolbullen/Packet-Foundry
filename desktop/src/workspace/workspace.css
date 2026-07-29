@@ -49,6 +49,18 @@
   background: var(--bg-subtle);
 }
 
+/* ---- document undo/redo ---- */
+
+.workspace-history-row {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.doc-history-controls {
+  display: flex;
+  gap: 0.4rem;
+}
+
 /* ---- breadcrumbs ---- */
 
 .breadcrumbs {

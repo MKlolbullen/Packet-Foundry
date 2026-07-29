@@ -50,11 +50,14 @@ export default function FieldDetail({
   const [pending, setPending] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
+  // Re-syncs on a focus change (a different field) *and* on a document swap for the same field —
+  // the latter matters because undo/redo replaces `document` out from under an open editor
+  // without going through afterMutation, which is the only other place this draft gets updated.
   useEffect(() => {
     setEditError(null);
     setDraftHex(field ? draftBytesFor(document, field.range) : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus.layerId, focus.fieldId]);
+  }, [focus.layerId, focus.fieldId, document]);
 
   if (!field) {
     return <p className="hint">This field is no longer present — the stack was re-assembled.</p>;
