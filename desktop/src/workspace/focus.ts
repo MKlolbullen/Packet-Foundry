@@ -11,10 +11,13 @@ export type FocusAxis = "structure" | "computation" | "flow";
  * stringified numeric `NodeId` from the Rust side — chosen so a `FocusTarget` can double as a
  * React key / dict key without extra coercion at every use site.
  *
- * Known gap (not fixed here): `operation`'s target carries no `layerId`, so a purely structural
- * rise from an operation can't locate its owning layer. Not a problem yet — nothing in this PR
- * ever dispatches a `DIVE`/`JUMP` to an `operation`, `byte`, or `bit` target; those are wired up
- * by a later PR alongside their projections.
+ * `byteIndex`/`bitIndex` are absolute, whole-document positions (bit 0 = MSB of buffer byte 0),
+ * matching `BitRange.start_bit` everywhere else in this codebase. `ownerId` on `byte`/`bit` is
+ * `` `${layerId}:${fieldId}` `` of the field it was reached from — parsed back by
+ * `structuralParent` for RISE. `operation.operationId` is always the literal `"root"` for now:
+ * per-node addressing inside an `Operation` tree (so a specific sub-node could be a FocusTarget
+ * of its own) is future work, since `Operation` carries no node identity yet either in Rust or
+ * here.
  */
 export type FocusTarget =
   | { kind: "packet" }
@@ -22,7 +25,7 @@ export type FocusTarget =
   | { kind: "field"; layerId: string; fieldId: string }
   | { kind: "byte"; byteIndex: number; ownerId?: string }
   | { kind: "bit"; bitIndex: number; ownerId?: string }
-  | { kind: "operation"; fieldId: string; operationId: string };
+  | { kind: "operation"; layerId: string; fieldId: string; operationId: string };
 
 export interface FocusSnapshot {
   axis: FocusAxis;
@@ -75,7 +78,7 @@ export function targetKey(target: FocusTarget): string {
     case "bit":
       return `bit:${target.bitIndex}`;
     case "operation":
-      return `operation:${target.fieldId}:${target.operationId}`;
+      return `operation:${target.layerId}:${target.fieldId}:${target.operationId}`;
   }
 }
 
@@ -105,8 +108,15 @@ export function describeTarget(doc: PacketDocument, target: FocusTarget): string
   }
 }
 
-/** The structural parent of a target, or `null` at the root (packet) or for kinds this PR never
- * reaches (byte/bit/operation dive isn't wired up yet). */
+function parseOwnerId(ownerId: string | undefined): { layerId: string; fieldId: string } | null {
+  if (!ownerId) return null;
+  const i = ownerId.lastIndexOf(":");
+  if (i < 0) return null;
+  return { layerId: ownerId.slice(0, i), fieldId: ownerId.slice(i + 1) };
+}
+
+/** The structural parent of a target, or `null` at the root (packet), or when a byte/bit carries
+ * no `ownerId` to rise through (nothing dives without one, but the type allows it). */
 function structuralParent(target: FocusTarget): FocusTarget | null {
   switch (target.kind) {
     case "packet":
@@ -115,10 +125,14 @@ function structuralParent(target: FocusTarget): FocusTarget | null {
       return { kind: "packet" };
     case "field":
       return { kind: "layer", layerId: target.layerId };
-    case "byte":
+    case "byte": {
+      const owner = parseOwnerId(target.ownerId);
+      return owner ? { kind: "field", layerId: owner.layerId, fieldId: owner.fieldId } : null;
+    }
     case "bit":
+      return { kind: "byte", byteIndex: Math.floor(target.bitIndex / 8), ownerId: target.ownerId };
     case "operation":
-      return null;
+      return { kind: "field", layerId: target.layerId, fieldId: target.fieldId };
   }
 }
 

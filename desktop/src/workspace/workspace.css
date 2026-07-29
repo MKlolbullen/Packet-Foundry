@@ -209,6 +209,87 @@
   margin: 0;
 }
 
+/* ---- byte inspector / bit inspector ---- */
+
+.byte-bits {
+  list-style: none;
+  margin: 0.4em 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bit-row {
+  display: flex;
+  gap: 0.6em;
+  padding: 0.2em 0.4em;
+  border-radius: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.bit-row:hover,
+.bit-row:focus-visible {
+  background: #f0f0f0;
+}
+
+/* ---- field detail: bytes section + derivation link ---- */
+
+.field-bytes {
+  margin-top: 0.6em;
+}
+
+.field-bytes-label {
+  color: #888;
+  font-size: 0.85em;
+  display: block;
+  margin-bottom: 0.3em;
+}
+
+.byte-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.byte-chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8em;
+  border: 1px solid #e2e2e2;
+  border-radius: 4px;
+  padding: 0.15em 0.5em;
+  background: transparent;
+  cursor: pointer;
+}
+
+.byte-chip:hover,
+.byte-chip:focus-visible {
+  border-color: #396cd8;
+}
+
+.view-derivation {
+  margin-top: 0.6em;
+}
+
+/* ---- operation projection (computation axis) ---- */
+
+.operation-projection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.operation-projection-header {
+  margin: 0;
+  font-size: 0.9em;
+}
+
+.operation-projection .viewport {
+  min-height: 320px;
+}
+
 /* ---- fallback ---- */
 
 .projection-fallback {
@@ -275,4 +356,24 @@
 :root[data-theme="dark"] .diagnostic-highlighted {
   background: #1e2740;
   color: #9db4ec;
+}
+
+:root[data-theme="dark"] .bit-row:hover,
+:root[data-theme="dark"] .bit-row:focus-visible,
+:root[data-theme="dark"] .byte-chip {
+  border-color: #3a3a3a;
+}
+
+:root[data-theme="dark"] .bit-row:hover,
+:root[data-theme="dark"] .bit-row:focus-visible {
+  background: #262626;
+}
+
+:root[data-theme="dark"] .byte-chip:hover,
+:root[data-theme="dark"] .byte-chip:focus-visible {
+  border-color: #6a8fe0;
+}
+
+:root[data-theme="dark"] .field-bytes-label {
+  color: #999;
 }

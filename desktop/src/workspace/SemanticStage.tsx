@@ -4,6 +4,9 @@ import type { FocusTarget, Selection } from "./focus";
 import PacketOverview from "./projections/PacketOverview";
 import LayerFieldMap from "./projections/LayerFieldMap";
 import FieldDetail from "./projections/FieldDetail";
+import ByteInspector from "./projections/ByteInspector";
+import BitInspector from "./projections/BitInspector";
+import OperationProjection from "./projections/OperationProjection";
 
 export interface ProjectionProps<T extends FocusTarget> {
   document: PacketDocument;
@@ -21,6 +24,9 @@ const REGISTRY: Registry = {
   packet: PacketOverview,
   layer: LayerFieldMap,
   field: FieldDetail,
+  byte: ByteInspector,
+  bit: BitInspector,
+  operation: OperationProjection,
 };
 
 function NotYetAvailable({ focus }: { focus: FocusTarget }) {
