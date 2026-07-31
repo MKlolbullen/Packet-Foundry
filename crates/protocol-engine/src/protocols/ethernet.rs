@@ -24,14 +24,10 @@ impl Default for EthernetParams {
     }
 }
 
-/// Build the header bytes and the layer description at absolute byte `offset`.
-pub fn build(offset: usize, p: &EthernetParams) -> (Vec<u8>, Layer) {
-    let mut bytes = vec![0u8; LEN];
-    bytes[0..6].copy_from_slice(&p.dst_mac);
-    bytes[6..12].copy_from_slice(&p.src_mac);
-    bytes[12..14].copy_from_slice(&p.ethertype.to_be_bytes());
-
-    let layer = Layer::new(
+/// The Ethernet II layer/field layout at absolute byte `offset`. Depends only on `offset`, so it
+/// is shared by `build` (assembly) and the dissector (reads captured bytes into this same layout).
+pub fn layer(offset: usize) -> Layer {
+    Layer::new(
         "Ethernet II",
         BitRange::bytes(offset, LEN),
         vec![
@@ -39,6 +35,14 @@ pub fn build(offset: usize, p: &EthernetParams) -> (Vec<u8>, Layer) {
             Field::new("SrcMac", BitRange::bytes(offset + 6, 6), FieldKind::MacAddr),
             Field::new("EtherType", BitRange::bytes(offset + 12, 2), FieldKind::Uint),
         ],
-    );
-    (bytes, layer)
+    )
+}
+
+/// Build the header bytes and the layer description at absolute byte `offset`.
+pub fn build(offset: usize, p: &EthernetParams) -> (Vec<u8>, Layer) {
+    let mut bytes = vec![0u8; LEN];
+    bytes[0..6].copy_from_slice(&p.dst_mac);
+    bytes[6..12].copy_from_slice(&p.src_mac);
+    bytes[12..14].copy_from_slice(&p.ethertype.to_be_bytes());
+    (bytes, layer(offset))
 }

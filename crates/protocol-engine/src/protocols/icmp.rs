@@ -27,19 +27,11 @@ impl Default for IcmpParams {
     }
 }
 
-/// Build the ICMP header bytes and layer at absolute byte `offset`. The Checksum bytes are filled
-/// by resolve.
-pub fn build(offset: usize, p: &IcmpParams) -> (Vec<u8>, Layer) {
-    let mut bytes = vec![0u8; LEN];
-    bytes[0] = p.icmp_type;
-    bytes[1] = p.code;
-    // [2..4] Checksum — derived
-    bytes[4..6].copy_from_slice(&p.identifier.to_be_bytes());
-    bytes[6..8].copy_from_slice(&p.sequence.to_be_bytes());
-
+/// The ICMP-echo layer/field layout at absolute byte `offset` — shared by `build` and the
+/// dissector.
+pub fn layer(offset: usize) -> Layer {
     let checksum = Operation::internet_checksum(vec![Operation::ReadFrom { from_byte: offset }]);
-
-    let layer = Layer::new(
+    Layer::new(
         "ICMP",
         BitRange::bytes(offset, LEN),
         vec![
@@ -49,6 +41,17 @@ pub fn build(offset: usize, p: &IcmpParams) -> (Vec<u8>, Layer) {
             Field::new("Identifier", BitRange::bytes(offset + 4, 2), FieldKind::Uint),
             Field::new("SequenceNumber", BitRange::bytes(offset + 6, 2), FieldKind::Uint),
         ],
-    );
-    (bytes, layer)
+    )
+}
+
+/// Build the ICMP header bytes and layer at absolute byte `offset`. The Checksum bytes are filled
+/// by resolve.
+pub fn build(offset: usize, p: &IcmpParams) -> (Vec<u8>, Layer) {
+    let mut bytes = vec![0u8; LEN];
+    bytes[0] = p.icmp_type;
+    bytes[1] = p.code;
+    // [2..4] Checksum — derived
+    bytes[4..6].copy_from_slice(&p.identifier.to_be_bytes());
+    bytes[6..8].copy_from_slice(&p.sequence.to_be_bytes());
+    (bytes, layer(offset))
 }

@@ -44,6 +44,37 @@ impl Default for TcpParams {
     }
 }
 
+/// The TCP (20-byte, no-options) layer/field layout at absolute byte `offset`. `ipv4_offset`
+/// locates the enclosing IPv4 layer for the checksum's pseudo-header — so this genuinely depends
+/// on it, not just `offset`. Shared by `build` and the dissector.
+pub fn layer(offset: usize, ipv4_offset: usize) -> Layer {
+    // Pseudo-header (src addr, dst addr, zero, protocol=6, TCP length) + the whole segment.
+    let checksum = Operation::internet_checksum(vec![
+        Operation::ReadRange(BitRange::bytes(ipv4_offset + 12, 4)),
+        Operation::ReadRange(BitRange::bytes(ipv4_offset + 16, 4)),
+        Operation::Const(vec![0x00, 0x06]),
+        Operation::ByteLength { from_byte: offset, width: 2 },
+        Operation::ReadFrom { from_byte: offset },
+    ]);
+
+    let bit = offset * 8;
+    Layer::new(
+        "TCP",
+        BitRange::bytes(offset, LEN),
+        vec![
+            Field::new("SrcPort", BitRange::bytes(offset, 2), FieldKind::Uint),
+            Field::new("DstPort", BitRange::bytes(offset + 2, 2), FieldKind::Uint),
+            Field::new("SeqNum", BitRange::bytes(offset + 4, 4), FieldKind::Uint),
+            Field::new("AckNum", BitRange::bytes(offset + 8, 4), FieldKind::Uint),
+            Field::new("DataOffset", BitRange::new(bit + 96, 4), FieldKind::Uint),
+            Field::new("Flags", BitRange::bytes(offset + 13, 1), FieldKind::Flags),
+            Field::new("Window", BitRange::bytes(offset + 14, 2), FieldKind::Uint),
+            Field::derived("Checksum", BitRange::bytes(offset + 16, 2), FieldKind::Uint, checksum),
+            Field::new("UrgentPtr", BitRange::bytes(offset + 18, 2), FieldKind::Uint),
+        ],
+    )
+}
+
 /// Build the TCP header bytes and layer at absolute byte `offset`. `ipv4_offset` is the absolute
 /// byte offset of the enclosing IPv4 layer, needed for the pseudo-header addresses. The Checksum
 /// bytes are left zero; the resolve pass computes them.
@@ -58,31 +89,5 @@ pub fn build(offset: usize, ipv4_offset: usize, p: &TcpParams) -> (Vec<u8>, Laye
     bytes[14..16].copy_from_slice(&p.window.to_be_bytes());
     // [16..18] Checksum — derived
     bytes[18..20].copy_from_slice(&p.urgent.to_be_bytes());
-
-    // Pseudo-header (src addr, dst addr, zero, protocol=6, TCP length) + the whole segment.
-    let checksum = Operation::internet_checksum(vec![
-        Operation::ReadRange(BitRange::bytes(ipv4_offset + 12, 4)),
-        Operation::ReadRange(BitRange::bytes(ipv4_offset + 16, 4)),
-        Operation::Const(vec![0x00, 0x06]),
-        Operation::ByteLength { from_byte: offset, width: 2 },
-        Operation::ReadFrom { from_byte: offset },
-    ]);
-
-    let bit = offset * 8;
-    let layer = Layer::new(
-        "TCP",
-        BitRange::bytes(offset, LEN),
-        vec![
-            Field::new("SrcPort", BitRange::bytes(offset, 2), FieldKind::Uint),
-            Field::new("DstPort", BitRange::bytes(offset + 2, 2), FieldKind::Uint),
-            Field::new("SeqNum", BitRange::bytes(offset + 4, 4), FieldKind::Uint),
-            Field::new("AckNum", BitRange::bytes(offset + 8, 4), FieldKind::Uint),
-            Field::new("DataOffset", BitRange::new(bit + 96, 4), FieldKind::Uint),
-            Field::new("Flags", BitRange::bytes(offset + 13, 1), FieldKind::Flags),
-            Field::new("Window", BitRange::bytes(offset + 14, 2), FieldKind::Uint),
-            Field::derived("Checksum", BitRange::bytes(offset + 16, 2), FieldKind::Uint, checksum),
-            Field::new("UrgentPtr", BitRange::bytes(offset + 18, 2), FieldKind::Uint),
-        ],
-    );
-    (bytes, layer)
+    (bytes, layer(offset, ipv4_offset))
 }

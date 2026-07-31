@@ -19,12 +19,9 @@ pub struct UdpParams {
 ///
 /// Note: RFC 768's special case (a computed checksum of `0x0000` is transmitted as `0xFFFF`) is
 /// not applied here — it is a ~1/65536 case and can be pinned via an override if needed.
-pub fn build(offset: usize, ipv4_offset: usize, p: &UdpParams) -> (Vec<u8>, Layer) {
-    let mut bytes = vec![0u8; LEN];
-    bytes[0..2].copy_from_slice(&p.src_port.to_be_bytes());
-    bytes[2..4].copy_from_slice(&p.dst_port.to_be_bytes());
-    // [4..6] Length — derived; [6..8] Checksum — derived
-
+/// The UDP layer/field layout at absolute byte `offset`. `ipv4_offset` locates the enclosing IPv4
+/// layer for the checksum's pseudo-header. Shared by `build` and the dissector.
+pub fn layer(offset: usize, ipv4_offset: usize) -> Layer {
     let checksum = Operation::internet_checksum(vec![
         Operation::ReadRange(BitRange::bytes(ipv4_offset + 12, 4)),
         Operation::ReadRange(BitRange::bytes(ipv4_offset + 16, 4)),
@@ -33,7 +30,7 @@ pub fn build(offset: usize, ipv4_offset: usize, p: &UdpParams) -> (Vec<u8>, Laye
         Operation::ReadFrom { from_byte: offset },
     ]);
 
-    let layer = Layer::new(
+    Layer::new(
         "UDP",
         BitRange::bytes(offset, LEN),
         vec![
@@ -47,6 +44,13 @@ pub fn build(offset: usize, ipv4_offset: usize, p: &UdpParams) -> (Vec<u8>, Laye
             ),
             Field::derived("Checksum", BitRange::bytes(offset + 6, 2), FieldKind::Uint, checksum),
         ],
-    );
-    (bytes, layer)
+    )
+}
+
+pub fn build(offset: usize, ipv4_offset: usize, p: &UdpParams) -> (Vec<u8>, Layer) {
+    let mut bytes = vec![0u8; LEN];
+    bytes[0..2].copy_from_slice(&p.src_port.to_be_bytes());
+    bytes[2..4].copy_from_slice(&p.dst_port.to_be_bytes());
+    // [4..6] Length — derived; [6..8] Checksum — derived
+    (bytes, layer(offset, ipv4_offset))
 }

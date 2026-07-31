@@ -5,6 +5,7 @@
 //! provides the built-in protocol builders (Ethernet II, IPv4, TCP, raw payload).
 
 pub mod descriptor;
+mod dissect;
 mod eval;
 pub mod protocols;
 mod registry;
@@ -13,6 +14,7 @@ mod resolve;
 pub use descriptor::{
     DExpr, DescriptorError, FieldDescriptor, LayoutContext, ProtocolDescriptor, lower,
 };
+pub use dissect::dissect;
 pub use eval::{EngineError, evaluate};
 pub use registry::{ProtocolSpec, assemble};
 pub use resolve::{resolve, validate};
