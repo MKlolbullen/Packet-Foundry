@@ -122,8 +122,10 @@ function WorkbenchStage({
       <div className="workbench-rail">
         <HexBitRail
           buffer={doc?.buffer ?? ""}
+          document={doc ?? undefined}
           selectedRange={camera.selectedRange}
           diagnostics={doc?.diagnostics ?? []}
+          onSelectRange={selectRange}
         />
       </div>
     </>

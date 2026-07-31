@@ -403,12 +403,12 @@
   color: var(--text-faint);
 }
 
-/* ---- hex bit rail ---- */
+/* ---- hex bit rail (hex / ascii / bits, bidirectional — UI redesign phase 4) ---- */
 
 .hex-bit-rail {
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -416,12 +416,40 @@
   font-size: 0.8em;
 }
 
+.hex-rail-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.hex-rail-count {
+  color: var(--text-faint);
+  font-size: 0.9em;
+}
+
+.hex-rail-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
 .hex-byte {
   padding: 0.15em 0.3em;
   border-radius: 3px;
+  cursor: pointer;
 }
 
-.hex-byte-selected {
+.hex-byte:hover {
+  background: var(--bg-subtle);
+}
+
+.hex-byte:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.hex-byte-selected,
+.hex-byte-selected:hover {
   background: var(--accent-soft-bg);
   color: var(--accent-soft-text);
 }
@@ -429,6 +457,30 @@
 .hex-byte-diagnosed {
   outline: 2px solid var(--warn);
   outline-offset: -1px;
+}
+
+/* Bits view: eight bit glyphs per byte cell, each independently highlightable. */
+.hex-rail-bits .hex-byte {
+  display: inline-flex;
+  gap: 1px;
+  padding: 0.15em 0.25em;
+}
+
+.hex-bit {
+  padding: 0 1px;
+  border-radius: 2px;
+  color: var(--text-muted);
+}
+
+.hex-bit-selected {
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
+}
+
+.hex-ascii-char {
+  display: inline-block;
+  min-width: 1ch;
+  text-align: center;
 }
 
 /* ---- diagnostics cross-highlight ---- */
