@@ -876,3 +876,127 @@
     transparent 8px
   );
 }
+
+/* ---- Changes panel (semantic diff) ---- */
+
+.changes-panel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.changes-panel h3 {
+  margin: 0 0 0.2rem;
+  font-size: 0.9em;
+}
+
+.changes-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.changes-layer-name {
+  font-weight: 600;
+  font-size: 0.82em;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.changes-layer-added {
+  color: var(--success);
+}
+
+.changes-layer-removed {
+  color: var(--error);
+}
+
+.changes-field {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.2em 0.4em;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  font-size: 0.82em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+button.changes-field {
+  cursor: pointer;
+}
+
+button.changes-field:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--bg-subtle);
+}
+
+button.changes-field:disabled {
+  cursor: default;
+}
+
+.changes-field-name {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.changes-field-value {
+  flex: 1 1 auto;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.changes-arrow {
+  color: var(--text-faint);
+}
+
+.changes-added .changes-field-name {
+  color: var(--success);
+}
+
+.changes-removed .changes-field-name {
+  color: var(--error);
+  text-decoration: line-through;
+}
+
+.changes-badge {
+  flex: 0 0 auto;
+  font-size: 0.85em;
+  padding: 0.05em 0.4em;
+  border-radius: 10px;
+}
+
+.changes-badge-direct_edit {
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
+}
+
+.changes-badge-derived_consequence {
+  background: var(--accent-2-soft-bg);
+  color: var(--accent-2-soft-text);
+}
+
+.changes-badge-state_only {
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+}
+
+.changes-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 0.3rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

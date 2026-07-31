@@ -9,9 +9,10 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use packet_core::{Diagnostic, Field, FieldKind, PacketDocument, Severity};
+use packet_core::{BitRange, Diagnostic, Field, PacketDocument, Severity};
+use protocol_engine::diff::{FieldChange, FieldDiff, LayerStatus, PacketDiff};
 use protocol_engine::protocols::tcp;
-use protocol_engine::{ProtocolSpec, assemble, validate};
+use protocol_engine::{ProtocolSpec, assemble, diff, format_field_value, validate};
 
 #[derive(Parser)]
 #[command(name = "packet-foundry", version, about = "A bidirectional assembler for wire formats")]
@@ -26,6 +27,8 @@ enum Command {
     Create(CreateArgs),
     /// Load a packet JSON and print its structure and diagnostics.
     Inspect(InspectArgs),
+    /// Compare two packet JSONs and print a causal diff (direct edits vs. derived consequences).
+    Diff(DiffArgs),
 }
 
 #[derive(Parser)]
@@ -72,10 +75,19 @@ struct InspectArgs {
     file: PathBuf,
 }
 
+#[derive(Parser)]
+struct DiffArgs {
+    /// The base packet JSON (the "before").
+    base: PathBuf,
+    /// The variant packet JSON (the "after").
+    variant: PathBuf,
+}
+
 fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Create(args) => run_create(args),
         Command::Inspect(args) => run_inspect(args),
+        Command::Diff(args) => run_diff(args),
     }
 }
 
@@ -105,6 +117,99 @@ fn run_inspect(args: InspectArgs) -> Result<()> {
     // Report the current state; never rewrite the bytes.
     print_diagnostics(&validate(&doc));
     Ok(())
+}
+
+fn load_doc(path: &std::path::Path) -> Result<PacketDocument> {
+    let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let mut doc = PacketDocument::from_json(&text).context("parsing packet JSON")?;
+    doc.assign_missing_node_ids();
+    Ok(doc)
+}
+
+fn run_diff(args: DiffArgs) -> Result<()> {
+    let mut base = load_doc(&args.base)?;
+    let mut variant = load_doc(&args.variant)?;
+    // Refresh diagnostics on both so docs produced by different means compare fairly (like inspect).
+    base.diagnostics = validate(&base);
+    variant.diagnostics = validate(&variant);
+    print_diff(&diff(&base, &variant), &args.base, &args.variant);
+    Ok(())
+}
+
+fn print_diff(d: &PacketDiff, base: &std::path::Path, variant: &std::path::Path) {
+    println!("Diff: {} → {}", base.display(), variant.display());
+    let mut any = false;
+    for layer in &d.layers {
+        match layer.status {
+            LayerStatus::Added => {
+                println!("  + {} (added)", layer.name);
+                for f in &layer.fields_added {
+                    println!("      + {:<16} = {}", f.name, f.value);
+                }
+                any = true;
+            }
+            LayerStatus::Removed => {
+                println!("  - {} (removed)", layer.name);
+                any = true;
+            }
+            LayerStatus::Modified => {
+                println!("  ~ {}", layer.name);
+                for f in &layer.fields_removed {
+                    println!("      - {:<16} = {}", f.name, f.value);
+                }
+                for f in &layer.fields_added {
+                    println!("      + {:<16} = {}", f.name, f.value);
+                }
+                for f in &layer.fields_changed {
+                    print_field_diff(f);
+                }
+                any = true;
+            }
+            LayerStatus::Unchanged => {}
+        }
+    }
+    if !any {
+        println!("  (no structural changes)");
+    }
+
+    if !d.diagnostics.added.is_empty() || !d.diagnostics.removed.is_empty() {
+        println!("Diagnostics:");
+        for dg in &d.diagnostics.removed {
+            println!("  - [{}] {}", dg.code, dg.message);
+        }
+        for dg in &d.diagnostics.added {
+            println!("  + [{}] {}", dg.code, dg.message);
+        }
+    }
+
+    let ranges: Vec<String> = d.bytes.changed.iter().map(|r| format!("[{}..{}]", r.start, r.end)).collect();
+    println!(
+        "Bytes: {}; length {} → {}",
+        if ranges.is_empty() { "none".to_string() } else { ranges.join(" ") },
+        d.bytes.len_before,
+        d.bytes.len_after,
+    );
+}
+
+fn print_field_diff(f: &FieldDiff) {
+    let causal = match f.change {
+        FieldChange::DirectEdit => "(direct edit)",
+        FieldChange::DerivedConsequence => "(derived consequence)",
+        FieldChange::StateOnly => "(state change)",
+        FieldChange::Unchanged => "",
+    };
+    let range = loc_str(f.range_after);
+    if f.change == FieldChange::StateOnly {
+        println!(
+            "      ~ {:<16} {:<12} state: {:?} → {:?}  {causal}",
+            f.name, range, f.state_before, f.state_after,
+        );
+    } else {
+        println!(
+            "      ~ {:<16} {:<12} {} → {}  {causal}",
+            f.name, range, f.value_before, f.value_after,
+        );
+    }
 }
 
 /// Turn CLI arguments into an ordered protocol stack.
@@ -248,16 +353,15 @@ fn print_tree(doc: &PacketDocument) {
             println!(
                 "    {:<16} {:<12} = {}{}",
                 field.name,
-                loc_str(field),
-                format_value(doc, field),
+                loc_str(field.range),
+                format_field_value(&doc.buffer, field),
                 marker(field),
             );
         }
     }
 }
 
-fn loc_str(field: &Field) -> String {
-    let r = field.range;
+fn loc_str(r: BitRange) -> String {
     if r.start_bit % 8 == 0 && r.len_bits % 8 == 0 {
         format!("[{}..{}]", r.start_bit / 8, (r.start_bit + r.len_bits) / 8)
     } else {
@@ -272,44 +376,6 @@ fn marker(field: &Field) -> &'static str {
         " (derived)"
     } else {
         ""
-    }
-}
-
-fn format_value(doc: &PacketDocument, field: &Field) -> String {
-    let buf = &doc.buffer;
-    match field.kind {
-        FieldKind::MacAddr => match buf.read_bytes(field.range) {
-            Ok(b) => b.iter().map(|x| format!("{x:02x}")).collect::<Vec<_>>().join(":"),
-            Err(_) => "<out-of-bounds>".into(),
-        },
-        FieldKind::Ipv4Addr => match buf.read_bytes(field.range) {
-            Ok(b) => b.iter().map(|x| x.to_string()).collect::<Vec<_>>().join("."),
-            Err(_) => "<out-of-bounds>".into(),
-        },
-        FieldKind::Ipv6Addr => match buf.read_bytes(field.range) {
-            // Full 8-group form (no `::` compression), lowercase.
-            Ok(b) => b
-                .chunks(2)
-                .map(|c| format!("{:02x}{:02x}", c[0], c.get(1).copied().unwrap_or(0)))
-                .collect::<Vec<_>>()
-                .join(":"),
-            Err(_) => "<out-of-bounds>".into(),
-        },
-        FieldKind::Uint => match buf.read_uint(field.range) {
-            Ok(v) => v.to_string(),
-            Err(_) => "<out-of-bounds>".into(),
-        },
-        FieldKind::Flags => match buf.read_uint(field.range) {
-            Ok(v) => format!("0x{v:02x}"),
-            Err(_) => "<out-of-bounds>".into(),
-        },
-        FieldKind::Bytes => match buf.read_bytes(field.range) {
-            Ok(b) => {
-                let hex: String = b.iter().map(|x| format!("{x:02x}")).collect();
-                if hex.len() > 32 { format!("{}…", &hex[..32]) } else { hex }
-            }
-            Err(_) => "<out-of-bounds>".into(),
-        },
     }
 }
 

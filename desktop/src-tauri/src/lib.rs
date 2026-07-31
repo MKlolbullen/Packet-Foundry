@@ -6,8 +6,8 @@ mod llm;
 
 use packet_core::{NodeId, Operation, PacketBuffer, PacketDocument};
 use protocol_engine::{
-    FieldPin, ProtocolCatalogEntry, ProtocolSpec, assemble, assemble_with_pins, catalog, dissect,
-    evaluate, resolve, validate,
+    FieldPin, PacketDiff, ProtocolCatalogEntry, ProtocolSpec, assemble, assemble_with_pins, catalog,
+    diff, dissect, evaluate, resolve, validate,
 };
 
 /// A protocol stack that assembles a valid Ethernet/IPv4/TCP SYN — the same packet the CLI's
@@ -43,6 +43,14 @@ fn create_packet(protocols: Vec<ProtocolSpec>) -> Result<PacketDocument, String>
 #[tauri::command]
 fn list_protocols() -> Vec<ProtocolCatalogEntry> {
     catalog()
+}
+
+/// Semantic diff of `variant` relative to `base` — classifies each field change as a direct edit
+/// vs. a derived consequence, plus layer add/remove, byte ranges, and a diagnostics delta. Pure and
+/// read-only; diffs the diagnostics the documents already carry (no re-validation).
+#[tauri::command]
+fn diff_packets(base: PacketDocument, variant: PacketDocument) -> PacketDiff {
+    diff(&base, &variant)
 }
 
 /// One layer the composer places: a protocol id (as in the catalogue / `ProtocolSpec::from_name`)
@@ -188,6 +196,7 @@ pub fn run() {
             create_packet,
             create_packet_composed,
             list_protocols,
+            diff_packets,
             inspect_packet,
             dissect_hex,
             evaluate_operation,
