@@ -7,7 +7,40 @@ export interface BitRange {
   len_bits: number;
 }
 
-export type FieldKind = "uint" | "bytes" | "mac_addr" | "ipv4_addr" | "flags";
+// --- Protocol catalogue (composer) — mirrors protocol_engine::catalog ---
+
+export type ProtocolCategory = "link" | "network" | "transport" | "application" | "payload";
+
+/** How a field participates in the composer form — mirrors `ParameterRole`. */
+export type ParameterRole = "editable" | "derived" | "auto_linked" | "fixed";
+
+export interface ParameterDescriptor {
+  name: string;
+  kind: FieldKind;
+  offset_bits: number;
+  width_bits: number;
+  /** Default bytes, in the same encoding a `FieldPin` uses. */
+  default: number[];
+  role: ParameterRole;
+}
+
+export interface ProtocolCatalogEntry {
+  id: string;
+  display_name: string;
+  category: ProtocolCategory;
+  allowed_parents: string[];
+  allowed_children: string[];
+  fields: ParameterDescriptor[];
+}
+
+/** A pinned field value — mirrors `protocol_engine::FieldPin`. */
+export interface FieldPin {
+  layer_index: number;
+  field_name: string;
+  bytes: number[];
+}
+
+export type FieldKind = "uint" | "bytes" | "mac_addr" | "ipv4_addr" | "ipv6_addr" | "flags";
 
 export interface Field {
   /** Stable identity (Rust `NodeId`, a `u64`) — `0` means unassigned. */
@@ -48,6 +81,14 @@ export interface EthernetParams {
   dst_mac: number[];
   src_mac: number[];
   ethertype: number;
+}
+
+export interface VlanParams {
+  /** Priority Code Point (0–7). */
+  priority: number;
+  dei: boolean;
+  /** VLAN identifier (0–4095). */
+  vlan_id: number;
 }
 
 export interface Ipv4Params {
@@ -102,13 +143,20 @@ export interface IcmpParams {
   sequence: number;
 }
 
+export interface Icmpv6Params {
+  icmp_type: number;
+  code: number;
+}
+
 /** Mirrors `ProtocolSpec`'s externally-tagged serde representation. */
 export type ProtocolSpec =
   | { Ethernet: EthernetParams }
+  | { Vlan: VlanParams }
   | { Ipv4: Ipv4Params }
   | { Ipv6: Ipv6Params }
   | { Arp: ArpParams }
   | { Tcp: TcpParams }
   | { Udp: UdpParams }
   | { Icmp: IcmpParams }
+  | { Icmpv6: Icmpv6Params }
   | { Raw: number[] };

@@ -133,6 +133,17 @@ fn build_stack(args: &CreateArgs) -> Result<Vec<ProtocolSpec>> {
             // IPv6 uses 16-byte addresses that the current --src-ip/--dst-ip (IPv4) flags can't
             // express; assemble it with defaults, or set fields via the desktop stack JSON.
             ProtocolSpec::Ipv6(_) => {}
+            // VLAN priority/id and ICMPv6 type/code have no dedicated CLI flags yet; assemble with
+            // defaults, or set fields via the desktop stack JSON.
+            ProtocolSpec::Vlan(_) => {}
+            ProtocolSpec::Icmpv6(p) => {
+                if let Some(v) = args.icmp_type {
+                    p.icmp_type = v;
+                }
+                if let Some(v) = args.icmp_code {
+                    p.code = v;
+                }
+            }
             ProtocolSpec::Arp(p) => {
                 if let Some(m) = &args.src_mac {
                     p.sender_mac = parse_mac(m)?;
@@ -273,6 +284,15 @@ fn format_value(doc: &PacketDocument, field: &Field) -> String {
         },
         FieldKind::Ipv4Addr => match buf.read_bytes(field.range) {
             Ok(b) => b.iter().map(|x| x.to_string()).collect::<Vec<_>>().join("."),
+            Err(_) => "<out-of-bounds>".into(),
+        },
+        FieldKind::Ipv6Addr => match buf.read_bytes(field.range) {
+            // Full 8-group form (no `::` compression), lowercase.
+            Ok(b) => b
+                .chunks(2)
+                .map(|c| format!("{:02x}{:02x}", c[0], c.get(1).copied().unwrap_or(0)))
+                .collect::<Vec<_>>()
+                .join(":"),
             Err(_) => "<out-of-bounds>".into(),
         },
         FieldKind::Uint => match buf.read_uint(field.range) {
