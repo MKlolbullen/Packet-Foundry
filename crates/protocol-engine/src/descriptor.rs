@@ -253,7 +253,7 @@ mod tests {
 
         let desc = ProtocolDescriptor::from_json(TCP_JSON).unwrap();
         let lowered = lower(&desc, &LayoutContext { offset: 34, placed: &placed }).unwrap();
-        let rust = tcp::build(34, 14, &tcp::TcpParams::default());
+        let rust = tcp::build(34, crate::protocols::Pseudo::Ipv4 { offset: 14 }, &tcp::TcpParams::default());
         assert_eq!(lowered, rust);
     }
 

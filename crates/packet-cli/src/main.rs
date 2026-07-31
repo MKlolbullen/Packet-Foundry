@@ -130,6 +130,23 @@ fn build_stack(args: &CreateArgs) -> Result<Vec<ProtocolSpec>> {
                     p.dst = ip.octets();
                 }
             }
+            // IPv6 uses 16-byte addresses that the current --src-ip/--dst-ip (IPv4) flags can't
+            // express; assemble it with defaults, or set fields via the desktop stack JSON.
+            ProtocolSpec::Ipv6(_) => {}
+            ProtocolSpec::Arp(p) => {
+                if let Some(m) = &args.src_mac {
+                    p.sender_mac = parse_mac(m)?;
+                }
+                if let Some(m) = &args.dst_mac {
+                    p.target_mac = parse_mac(m)?;
+                }
+                if let Some(ip) = args.src_ip {
+                    p.sender_ip = ip.octets();
+                }
+                if let Some(ip) = args.dst_ip {
+                    p.target_ip = ip.octets();
+                }
+            }
             ProtocolSpec::Tcp(p) => {
                 if let Some(v) = args.src_port {
                     p.src_port = v;

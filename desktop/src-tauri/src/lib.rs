@@ -5,7 +5,7 @@
 mod llm;
 
 use packet_core::{NodeId, Operation, PacketBuffer, PacketDocument};
-use protocol_engine::{ProtocolSpec, assemble, evaluate, resolve, validate};
+use protocol_engine::{ProtocolSpec, assemble, dissect, evaluate, resolve, validate};
 
 /// A protocol stack that assembles a valid Ethernet/IPv4/TCP SYN — the same packet the CLI's
 /// README quick start builds. Used to seed the UI with something real to look at.
@@ -42,6 +42,16 @@ fn inspect_packet(document_json: String) -> Result<PacketDocument, String> {
     doc.assign_missing_node_ids();
     doc.diagnostics = validate(&doc);
     Ok(doc)
+}
+
+/// Dissect raw packet bytes (hex-encoded, whitespace tolerated so a Wireshark-style paste works)
+/// into a navigable document — the reverse of `create_packet`. Bytes stay authoritative; the
+/// result carries diagnostics for anything that doesn't fit the standard layout.
+#[tauri::command]
+fn dissect_hex(hex: String) -> Result<PacketDocument, String> {
+    let cleaned: String = hex.split_whitespace().collect();
+    let bytes = hex::decode(cleaned).map_err(|e| e.to_string())?;
+    Ok(dissect(&bytes))
 }
 
 /// Evaluate a single `Operation` against a scratch buffer (hex-encoded) and return its byte
@@ -133,6 +143,7 @@ pub fn run() {
             default_stack,
             create_packet,
             inspect_packet,
+            dissect_hex,
             evaluate_operation,
             set_field_bytes,
             clear_field_override,

@@ -147,6 +147,10 @@ function SemanticWorkspace({
 
 export default function Workspace({ active }: { active: boolean }) {
   const [stackText, setStackText] = useState("");
+  // "spec" assembles a ProtocolSpec[] forward into bytes; "bytes" dissects a raw hex capture
+  // backward into layers/fields. Both feed the same doc, so the whole workspace works on either.
+  const [inputMode, setInputMode] = useState<"spec" | "bytes">("spec");
+  const [hexText, setHexText] = useState("");
   const [docState, dispatchDoc] = useReducer(documentHistoryReducer, INITIAL_DOCUMENT_HISTORY);
   const doc = docState.current;
   const [error, setError] = useState<string | null>(null);
@@ -193,6 +197,16 @@ export default function Workspace({ active }: { active: boolean }) {
     }
   }
 
+  async function onDissectClick() {
+    try {
+      const dissected = await invoke<PacketDocument>("dissect_hex", { hex: hexText });
+      dispatchDoc({ type: "SET", document: dissected });
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   async function onInspectClick() {
     try {
       const loaded = await invoke<PacketDocument>("inspect_packet", { documentJson: inspectText });
@@ -219,19 +233,58 @@ export default function Workspace({ active }: { active: boolean }) {
       first={
         <section className="pane">
           <h2>Build</h2>
-          <p className="hint">Edit the protocol stack (an array of `ProtocolSpec`) and assemble it.</p>
-          <textarea
-            className="json-editor small"
-            value={stackText}
-            onChange={(e) => setStackText(e.currentTarget.value)}
-            spellCheck={false}
-          />
-          <div className="row">
-            <button onClick={onAssembleClick}>Assemble</button>
-            <button onClick={sendToInspector} disabled={!doc}>
-              Send to Inspect →
+          <div className="edit-mode-toggle" role="radiogroup" aria-label="Input mode">
+            <button
+              className={inputMode === "spec" ? "theme-option active" : "theme-option"}
+              aria-pressed={inputMode === "spec"}
+              onClick={() => setInputMode("spec")}
+            >
+              Assemble from spec
+            </button>
+            <button
+              className={inputMode === "bytes" ? "theme-option active" : "theme-option"}
+              aria-pressed={inputMode === "bytes"}
+              onClick={() => setInputMode("bytes")}
+            >
+              Dissect from bytes
             </button>
           </div>
+          {inputMode === "spec" ? (
+            <>
+              <p className="hint">Edit the protocol stack (an array of `ProtocolSpec`) and assemble it.</p>
+              <textarea
+                className="json-editor small"
+                value={stackText}
+                onChange={(e) => setStackText(e.currentTarget.value)}
+                spellCheck={false}
+              />
+              <div className="row">
+                <button onClick={onAssembleClick}>Assemble</button>
+                <button onClick={sendToInspector} disabled={!doc}>
+                  Send to Inspect →
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="hint">
+                Paste a raw packet's hex (an Ethernet II frame — spaces and newlines are fine) and
+                dissect it into layers and fields.
+              </p>
+              <textarea
+                className="json-editor small"
+                value={hexText}
+                onChange={(e) => setHexText(e.currentTarget.value)}
+                placeholder="ffffffffffff 020000000001 0800 4500 2c00 …"
+                spellCheck={false}
+              />
+              <div className="row">
+                <button onClick={onDissectClick} disabled={!hexText.trim()}>
+                  Dissect
+                </button>
+              </div>
+            </>
+          )}
           {error && <p className="error">{error}</p>}
           <WorkspaceProvider>
             <SemanticWorkspace doc={doc} active={active} edit={edit} />

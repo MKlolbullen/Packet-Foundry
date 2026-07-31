@@ -3,8 +3,10 @@
 //! segment length) together with the TCP segment itself — the best torture test for the
 //! dependency-ordered resolver.
 
-use packet_core::{BitRange, Field, FieldKind, Layer, Operation};
+use packet_core::{BitRange, Field, FieldKind, Layer};
 use serde::{Deserialize, Serialize};
+
+use super::Pseudo;
 
 /// Length of a TCP header without options, in bytes.
 pub const LEN: usize = 20;
@@ -44,32 +46,14 @@ impl Default for TcpParams {
     }
 }
 
-/// Build the TCP header bytes and layer at absolute byte `offset`. `ipv4_offset` is the absolute
-/// byte offset of the enclosing IPv4 layer, needed for the pseudo-header addresses. The Checksum
-/// bytes are left zero; the resolve pass computes them.
-pub fn build(offset: usize, ipv4_offset: usize, p: &TcpParams) -> (Vec<u8>, Layer) {
-    let mut bytes = vec![0u8; LEN];
-    bytes[0..2].copy_from_slice(&p.src_port.to_be_bytes());
-    bytes[2..4].copy_from_slice(&p.dst_port.to_be_bytes());
-    bytes[4..8].copy_from_slice(&p.seq.to_be_bytes());
-    bytes[8..12].copy_from_slice(&p.ack.to_be_bytes());
-    bytes[12] = 5 << 4; // Data Offset 5, reserved 0
-    bytes[13] = p.flags;
-    bytes[14..16].copy_from_slice(&p.window.to_be_bytes());
-    // [16..18] Checksum — derived
-    bytes[18..20].copy_from_slice(&p.urgent.to_be_bytes());
-
-    // Pseudo-header (src addr, dst addr, zero, protocol=6, TCP length) + the whole segment.
-    let checksum = Operation::internet_checksum(vec![
-        Operation::ReadRange(BitRange::bytes(ipv4_offset + 12, 4)),
-        Operation::ReadRange(BitRange::bytes(ipv4_offset + 16, 4)),
-        Operation::Const(vec![0x00, 0x06]),
-        Operation::ByteLength { from_byte: offset, width: 2 },
-        Operation::ReadFrom { from_byte: offset },
-    ]);
+/// The TCP (20-byte, no-options) layer/field layout at absolute byte `offset`. `pseudo` locates
+/// the enclosing IP layer (v4 or v6) for the checksum's pseudo-header — so this genuinely depends
+/// on it, not just `offset`. Shared by `build` and the dissector.
+pub fn layer(offset: usize, pseudo: Pseudo) -> Layer {
+    let checksum = pseudo.checksum(offset, 6); // pseudo-header + the whole segment
 
     let bit = offset * 8;
-    let layer = Layer::new(
+    Layer::new(
         "TCP",
         BitRange::bytes(offset, LEN),
         vec![
@@ -83,6 +67,22 @@ pub fn build(offset: usize, ipv4_offset: usize, p: &TcpParams) -> (Vec<u8>, Laye
             Field::derived("Checksum", BitRange::bytes(offset + 16, 2), FieldKind::Uint, checksum),
             Field::new("UrgentPtr", BitRange::bytes(offset + 18, 2), FieldKind::Uint),
         ],
-    );
-    (bytes, layer)
+    )
+}
+
+/// Build the TCP header bytes and layer at absolute byte `offset`. `pseudo` locates the enclosing
+/// IP layer (v4 or v6) for the checksum's pseudo-header. The Checksum bytes are left zero; the
+/// resolve pass computes them.
+pub fn build(offset: usize, pseudo: Pseudo, p: &TcpParams) -> (Vec<u8>, Layer) {
+    let mut bytes = vec![0u8; LEN];
+    bytes[0..2].copy_from_slice(&p.src_port.to_be_bytes());
+    bytes[2..4].copy_from_slice(&p.dst_port.to_be_bytes());
+    bytes[4..8].copy_from_slice(&p.seq.to_be_bytes());
+    bytes[8..12].copy_from_slice(&p.ack.to_be_bytes());
+    bytes[12] = 5 << 4; // Data Offset 5, reserved 0
+    bytes[13] = p.flags;
+    bytes[14..16].copy_from_slice(&p.window.to_be_bytes());
+    // [16..18] Checksum — derived
+    bytes[18..20].copy_from_slice(&p.urgent.to_be_bytes());
+    (bytes, layer(offset, pseudo))
 }

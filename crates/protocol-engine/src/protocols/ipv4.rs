@@ -34,23 +34,13 @@ impl Default for Ipv4Params {
     }
 }
 
-/// Build the header bytes and layer at absolute byte `offset`. Total Length and Header Checksum
-/// bytes are left zero here; the resolve pass fills them from their derivations.
-pub fn build(offset: usize, p: &Ipv4Params) -> (Vec<u8>, Layer) {
-    let mut bytes = vec![0u8; LEN];
-    bytes[0] = 0x45; // Version 4, IHL 5
-    bytes[1] = p.dscp_ecn;
-    // [2..4] Total Length — derived
-    bytes[4..6].copy_from_slice(&p.identification.to_be_bytes());
-    bytes[6..8].copy_from_slice(&p.flags_frag.to_be_bytes());
-    bytes[8] = p.ttl;
-    bytes[9] = p.protocol;
-    // [10..12] Header Checksum — derived
-    bytes[12..16].copy_from_slice(&p.src);
-    bytes[16..20].copy_from_slice(&p.dst);
-
+/// The IPv4 (20-byte, no-options) layer/field layout at absolute byte `offset` — shared by
+/// `build` and the dissector. Total Length / Header Checksum are derived fields; a dissected
+/// packet keeps its captured bytes (validate, not resolve), so those fields carry their
+/// derivations for reference without being recomputed.
+pub fn layer(offset: usize) -> Layer {
     let bit = offset * 8;
-    let layer = Layer::new(
+    Layer::new(
         "IPv4",
         BitRange::bytes(offset, LEN),
         vec![
@@ -76,6 +66,22 @@ pub fn build(offset: usize, p: &Ipv4Params) -> (Vec<u8>, Layer) {
             Field::new("SrcAddr", BitRange::bytes(offset + 12, 4), FieldKind::Ipv4Addr),
             Field::new("DstAddr", BitRange::bytes(offset + 16, 4), FieldKind::Ipv4Addr),
         ],
-    );
-    (bytes, layer)
+    )
+}
+
+/// Build the header bytes and layer at absolute byte `offset`. Total Length and Header Checksum
+/// bytes are left zero here; the resolve pass fills them from their derivations.
+pub fn build(offset: usize, p: &Ipv4Params) -> (Vec<u8>, Layer) {
+    let mut bytes = vec![0u8; LEN];
+    bytes[0] = 0x45; // Version 4, IHL 5
+    bytes[1] = p.dscp_ecn;
+    // [2..4] Total Length — derived
+    bytes[4..6].copy_from_slice(&p.identification.to_be_bytes());
+    bytes[6..8].copy_from_slice(&p.flags_frag.to_be_bytes());
+    bytes[8] = p.ttl;
+    bytes[9] = p.protocol;
+    // [10..12] Header Checksum — derived
+    bytes[12..16].copy_from_slice(&p.src);
+    bytes[16..20].copy_from_slice(&p.dst);
+    (bytes, layer(offset))
 }
