@@ -3,6 +3,7 @@
 //! visual definition would produce.
 
 pub mod arp;
+pub mod dns;
 pub mod ethernet;
 pub mod icmp;
 pub mod icmpv6;

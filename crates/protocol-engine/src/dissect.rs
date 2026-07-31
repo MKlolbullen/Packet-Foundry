@@ -18,7 +18,7 @@
 
 use packet_core::{Layer, PacketBuffer, PacketDocument};
 
-use crate::protocols::{Pseudo, arp, ethernet, icmp, icmpv6, ipv4, ipv6, raw, tcp, udp, vlan};
+use crate::protocols::{Pseudo, arp, dns, ethernet, icmp, icmpv6, ipv4, ipv6, raw, tcp, udp, vlan};
 use crate::resolve::validate;
 
 const ETH_LEN: usize = ethernet::LEN;
@@ -57,6 +57,14 @@ pub fn dissect(bytes: &[u8]) -> PacketDocument {
     doc.assign_missing_node_ids();
     doc.diagnostics = validate(&doc);
     doc
+}
+
+/// Whether either transport port at `transport_off` is the DNS port. Caller must have already
+/// length-gated `transport_off + 4` (both ports live in the first 4 header bytes of TCP/UDP).
+fn is_dns_ports(bytes: &[u8], transport_off: usize) -> bool {
+    let src = u16::from_be_bytes([bytes[transport_off], bytes[transport_off + 1]]);
+    let dst = u16::from_be_bytes([bytes[transport_off + 2], bytes[transport_off + 3]]);
+    src == dns::DNS_PORT || dst == dns::DNS_PORT
 }
 
 /// Wrap `[off, bytes.len())` as an opaque layer named `name`, if there's anything there.
@@ -169,14 +177,25 @@ fn dissect_transport(bytes: &[u8], off: usize, pseudo: Pseudo, proto: u8, layers
                     layers.push(raw::layer(off + TCP_MIN, opt_end - (off + TCP_MIN), "TCP Options"));
                 }
             }
-            push_raw(bytes, off + hdr, "Payload", layers);
+            let payload_off = off + hdr;
+            // DNS-over-TCP has a 2-byte length prefix, so it needs 14 payload bytes for a header.
+            if is_dns_ports(bytes, off) && bytes.len() >= payload_off + 2 + 12 {
+                dns::dissect_into(bytes, payload_off, true, layers);
+            } else {
+                push_raw(bytes, payload_off, "Payload", layers);
+            }
         }
         IP_PROTO_UDP => {
             layers.push(udp::layer(off, pseudo));
             if bytes.len() < off + UDP_LEN {
                 return;
             }
-            push_raw(bytes, off + UDP_LEN, "Payload", layers);
+            let payload_off = off + UDP_LEN;
+            if is_dns_ports(bytes, off) && bytes.len() >= payload_off + 12 {
+                dns::dissect_into(bytes, payload_off, false, layers);
+            } else {
+                push_raw(bytes, payload_off, "Payload", layers);
+            }
         }
         IP_PROTO_ICMP => {
             layers.push(icmp::layer(off));
@@ -454,6 +473,53 @@ mod tests {
         assert_eq!(vlan_count, MAX_VLAN_DEPTH, "VLAN depth must be capped");
         // Beyond the cap the remainder is opaque, not further tags.
         assert_eq!(doc.layers.last().unwrap().name, "Unknown");
+    }
+
+    #[test]
+    fn dissects_dns_over_udp_end_to_end() {
+        // Hand-built Ethernet/IPv4/UDP(dst 53)/DNS(example.com A query).
+        let dns: &[u8] = &[
+            0xdb, 0x42, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // header (qd=1, RD)
+            7, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 3, b'c', b'o', b'm', 0, // example.com
+            0x00, 0x01, 0x00, 0x01, // QTYPE A, QCLASS IN
+        ];
+        let mut f = vec![0u8; ETH_LEN];
+        f[12] = 0x08; // ethertype IPv4 (0x0800)
+        let mut ip = vec![0u8; IPV4_MIN];
+        ip[0] = 0x45; // v4, IHL 5
+        ip[9] = IP_PROTO_UDP;
+        f.extend_from_slice(&ip);
+        let mut u = vec![0u8; UDP_LEN];
+        u[3] = 0x35; // dst port 53
+        f.extend_from_slice(&u);
+        f.extend_from_slice(dns);
+
+        let doc = dissect(&f);
+        let names: Vec<&str> = doc.layers.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, vec!["Ethernet II", "IPv4", "UDP", "DNS Header", "DNS Question: example.com"]);
+
+        let header = doc.layers.iter().find(|l| l.name == "DNS Header").unwrap();
+        assert_eq!(doc.buffer.read_uint(header.field("TransactionId").unwrap().range).unwrap(), 0xdb42);
+        assert_eq!(doc.buffer.read_uint(header.field("RD").unwrap().range).unwrap(), 1);
+        assert_eq!(doc.buffer.read_uint(header.field("QDCOUNT").unwrap().range).unwrap(), 1);
+        let question = doc.layers.iter().find(|l| l.name.starts_with("DNS Question")).unwrap();
+        assert_eq!(doc.buffer.read_uint(question.field("QType").unwrap().range).unwrap(), 1);
+        assert_eq!(doc.buffer.read_uint(question.field("QClass").unwrap().range).unwrap(), 1);
+    }
+
+    #[test]
+    fn non_dns_udp_payload_stays_opaque() {
+        // UDP to a non-DNS port with a payload → a Raw "Payload" layer, not DNS.
+        let doc = assemble(&[
+            ProtocolSpec::Ethernet(ethernet::EthernetParams::default()),
+            ProtocolSpec::Ipv4(ipv4::Ipv4Params { protocol: IP_PROTO_UDP, ..Default::default() }),
+            ProtocolSpec::Udp(crate::protocols::udp::UdpParams { dst_port: 80, ..Default::default() }),
+            ProtocolSpec::Raw(b"not dns".to_vec()),
+        ])
+        .unwrap();
+        let out = dissect(doc.buffer.as_slice());
+        let names: Vec<&str> = out.layers.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, vec!["Ethernet II", "IPv4", "UDP", "Payload"]);
     }
 
     #[test]
