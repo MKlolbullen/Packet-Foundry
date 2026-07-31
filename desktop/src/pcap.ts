@@ -1,15 +1,17 @@
 // Classic libpcap (.pcap) reader — pure and client-side, mirroring strings.ts: the frontend
 // already holds the file's bytes, so parsing needs no backend round-trip. Each frame's link-layer
-// bytes feed the existing `dissect_hex` command one at a time, on demand. pcapng is out of scope
-// (a different, block-structured format); only the classic 24-byte-global-header layout is read.
+// bytes feed the existing `dissect_hex` command one at a time, on demand. This module reads only
+// the classic 24-byte-global-header layout; the block-structured pcapng format is handled by its
+// sibling `pcapng.ts` (both return this module's `PcapCapture`), dispatched by `capture.ts`.
 
 const GLOBAL_HEADER_LEN = 24;
 const RECORD_HEADER_LEN = 16;
 /** LINKTYPE_ETHERNET — the only link type `dissect()` reads as an Ethernet II frame. */
 export const LINKTYPE_ETHERNET = 1;
 /** Cap the number of frames surfaced from one file — a capture can hold millions; the picker
- * only needs a workable slice, and holding every frame's bytes in memory would be wasteful. */
-const MAX_FRAMES = 5000;
+ * only needs a workable slice, and holding every frame's bytes in memory would be wasteful.
+ * Shared with the pcapng reader so both formats cap identically. */
+export const MAX_FRAMES = 5000;
 
 export interface PcapFrame {
   /** 0-based position in the file. */

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PacketDiff, PacketDocument, ProtocolSpec } from "../types";
 import { bytesToHex } from "../hex";
-import { LINKTYPE_ETHERNET, frameTimestamp, parsePcap, type PcapFrame } from "../pcap";
+import { LINKTYPE_ETHERNET, frameTimestamp, type PcapFrame } from "../pcap";
+import { parseCapture } from "../capture";
 import { summarizeFrame } from "../framePeek";
 import ProtocolPalette from "../composer/ProtocolPalette";
 import StackView from "../composer/StackView";
@@ -348,7 +349,7 @@ export default function Workspace({ active }: { active: boolean }) {
     if (!file) return;
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const cap = parsePcap(bytes);
+      const cap = parseCapture(bytes);
       setPcapFrames(cap.frames);
       setPcapMeta({
         linkType: cap.linkType,
@@ -492,13 +493,13 @@ export default function Workspace({ active }: { active: boolean }) {
           {inputMode === "pcap" && (
             <div className="workbench-input">
               <p className="hint">
-                Open a classic <code>.pcap</code> capture and pick a frame to dissect. Each frame is
-                read as an Ethernet II packet.
+                Open a <code>.pcap</code> or <code>.pcapng</code> capture and pick a frame to
+                dissect. Each frame is read as an Ethernet II packet.
               </p>
               <input
                 type="file"
                 className="pcap-file"
-                accept=".pcap,.cap,application/vnd.tcpdump.pcap,application/octet-stream"
+                accept=".pcap,.pcapng,.cap,application/vnd.tcpdump.pcap,application/octet-stream"
                 onChange={(e) => onPickPcap(e.currentTarget.files?.[0])}
               />
               {pcapMeta && pcapFrames && (
