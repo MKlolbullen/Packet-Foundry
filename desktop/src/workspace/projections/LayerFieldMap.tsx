@@ -1,10 +1,18 @@
 import { formatFieldValue, hexToBytes, locationString } from "../../packet";
 import type { ProjectionProps } from "../SemanticStage";
 import { findLayer, type FocusTarget } from "../focus";
+import { computeLayerDiagram } from "../layerDiagram";
+import LayerDiagram from "./LayerDiagram";
 
 type LayerFocus = Extract<FocusTarget, { kind: "layer" }>;
 
-export default function LayerFieldMap({ document, focus, onDive, onSelect }: ProjectionProps<LayerFocus>) {
+export default function LayerFieldMap({
+  document,
+  focus,
+  selection,
+  onDive,
+  onSelect,
+}: ProjectionProps<LayerFocus>) {
   const layer = findLayer(document, focus.layerId);
   if (!layer) {
     return <p className="hint">This layer is no longer present — the stack was re-assembled.</p>;
@@ -13,6 +21,21 @@ export default function LayerFieldMap({ document, focus, onDive, onSelect }: Pro
   const bytes = hexToBytes(document.buffer);
   if (bytes === null) {
     return <p className="error">Malformed buffer: `{document.buffer}` is not valid hex.</p>;
+  }
+
+  // Bit-width-aware diagram when the fields tile a clean grid; the field table otherwise (opaque
+  // blobs, overlaps, oversized payloads).
+  const rows = computeLayerDiagram(layer);
+  if (rows) {
+    return (
+      <LayerDiagram
+        rows={rows}
+        bytes={bytes}
+        selectedRange={selection?.range}
+        onSelectRange={(range) => onSelect({ source: focus, range })}
+        onDiveField={(fieldId) => onDive({ kind: "field", layerId: focus.layerId, fieldId })}
+      />
+    );
   }
 
   return (

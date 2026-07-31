@@ -697,3 +697,103 @@
 .workbench-right .composer-inspector {
   width: 100%;
 }
+
+/* ---- bit-width-aware layer diagram (UI redesign, phase 3) ---- */
+
+.layer-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.layer-diagram-ruler,
+.layer-diagram-row {
+  display: grid;
+  grid-template-columns: repeat(32, 1fr);
+}
+
+.layer-diagram-ruler {
+  margin-bottom: 1px;
+}
+
+.ruler-tick {
+  font-size: 0.62rem;
+  color: var(--text-faint);
+  border-left: 1px solid var(--border);
+  padding-left: 3px;
+}
+
+.layer-diagram-row {
+  min-height: 2.6em;
+}
+
+.diag-field {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  margin: 1px;
+  padding: 0.2em 0.4em;
+  border: 1px solid var(--accent-border-soft);
+  border-radius: 5px;
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+
+.diag-field:hover {
+  border-color: var(--accent);
+}
+
+.diag-field:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.diag-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.diag-derived {
+  background: var(--accent-2-soft-bg);
+  color: var(--accent-2-soft-text);
+  border-color: var(--accent-2);
+}
+
+.diag-pinned {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.diag-name {
+  font-weight: 600;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diag-value {
+  font-size: 0.7rem;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diag-gap {
+  margin: 1px;
+  border-radius: 5px;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--bg-subtle),
+    var(--bg-subtle) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
