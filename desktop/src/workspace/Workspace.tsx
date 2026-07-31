@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useReducer, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PacketDocument, ProtocolSpec } from "../types";
-import { formatFieldValue, hexToBytes, locationString } from "../packet";
-import SplitPane from "../SplitPane";
-import Composer from "../composer/Composer";
+import ProtocolPalette from "../composer/ProtocolPalette";
+import StackView from "../composer/StackView";
+import LayerInspector from "../composer/LayerInspector";
+import { useComposer } from "../composer/useComposer";
 import Breadcrumbs from "./Breadcrumbs";
-import PacketOutline from "./PacketOutline";
 import SemanticStage from "./SemanticStage";
 import DiagnosticsPanel from "./DiagnosticsPanel";
 import HexBitRail from "./HexBitRail";
@@ -13,9 +13,10 @@ import { WorkspaceProvider, useWorkspace } from "./WorkspaceContext";
 import { INITIAL_DOCUMENT_HISTORY, documentHistoryReducer } from "./documentHistory";
 import "./workspace.css";
 
-/** Document-mutation state and actions, grouped into one prop — these all move together (they
- * all touch the same undo/redo stack), the same way camera navigation callbacks already come
- * bundled through useWorkspace()'s WorkspaceApi rather than as loose props. */
+type InputMode = "compose" | "spec" | "dissect" | "load";
+
+/** Document-mutation state and actions, grouped into one object — they all touch the same
+ * undo/redo stack, mirroring how camera navigation callbacks come bundled through useWorkspace(). */
 interface DocumentEditApi {
   onDocumentChange: (document: PacketDocument) => void;
   canUndo: boolean;
@@ -24,56 +25,23 @@ interface DocumentEditApi {
   onRedo: () => void;
 }
 
-// The Inspect pane's document view — kept as the old flat, non-navigable tree this PR (paste a
-// document's JSON, see its layers/fields/diagnostics). Not re-plumbed through WorkspaceContext:
-// whether "Inspect" also gets the full semantic-camera treatment is scoped to a later PR.
-function InspectPacketTree({ doc }: { doc: PacketDocument }) {
-  const bytes = hexToBytes(doc.buffer);
-  if (bytes === null) {
-    return <p className="error">Malformed buffer: `{doc.buffer}` is not valid hex.</p>;
-  }
-  return (
-    <div className="tree">
-      <p className="tree-summary">
-        {bytes.length} bytes · {doc.layers.length} layer{doc.layers.length === 1 ? "" : "s"}
-      </p>
-      {doc.layers.map((layer) => (
-        <div className="layer" key={layer.id}>
-          <div className="layer-name">
-            {layer.name} <span className="loc">{locationString(layer.range)}</span>
-          </div>
-          <table className="fields">
-            <tbody>
-              {layer.fields.map((field) => (
-                <tr key={field.id}>
-                  <td className="field-name">{field.name}</td>
-                  <td className="loc">{locationString(field.range)}</td>
-                  <td className="field-value">{formatFieldValue(bytes, field)}</td>
-                  <td className="field-marker">
-                    {field.override_bytes ? "pinned" : field.derivation ? "derived" : ""}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
-      <DiagnosticsPanel diagnostics={doc.diagnostics} />
-    </div>
-  );
-}
+type ComposerApi = ReturnType<typeof useComposer>;
 
-// The navigable structure-axis workspace — outline | stage | diagnostics, with a hex rail below
-// and breadcrumbs above. Everything here reads `doc` via props; camera/focus state comes from
-// WorkspaceContext.
-function SemanticWorkspace({
+// The center + right rails + hex rail: the always-visible semantic view of the current document,
+// its per-field/per-layer inspector, diagnostics, and the byte rail. Reads `doc` via props; the
+// camera/focus state comes from WorkspaceContext.
+function WorkbenchStage({
   doc,
   active,
   edit,
+  composer,
+  mode,
 }: {
   doc: PacketDocument | null;
   active: boolean;
   edit: DocumentEditApi;
+  composer: ComposerApi;
+  mode: InputMode;
 }) {
   const { camera, dive, jump, rise, back, forward, selectRange } = useWorkspace();
 
@@ -82,9 +50,8 @@ function SemanticWorkspace({
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target;
       const isTextEntry = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
-      // Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z (and +Y as an alternate redo) drive document undo/redo —
-      // gated off text-entry targets so native browser undo still wins inside the stack/inspect
-      // JSON textareas and FieldDetail's hex-edit input, instead of being hijacked.
+      // Ctrl/Cmd+Z / +Shift+Z (and +Y) drive document undo/redo — gated off text entry so native
+      // undo still wins inside the JSON/hex textareas and field inputs.
       if (!isTextEntry && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) edit.onRedo();
@@ -96,70 +63,85 @@ function SemanticWorkspace({
         edit.onRedo();
         return;
       }
-      if (e.key === "Escape") {
-        rise();
-      } else if (e.altKey && e.key === "ArrowLeft") {
-        back();
-      } else if (e.altKey && e.key === "ArrowRight") {
-        forward();
-      }
+      if (e.key === "Escape") rise();
+      else if (e.altKey && e.key === "ArrowLeft") back();
+      else if (e.altKey && e.key === "ArrowRight") forward();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [active, rise, back, forward, edit]);
 
-  if (!doc) {
-    return <p className="hint">Assemble a stack to explore it here.</p>;
-  }
+  const selection = camera.selectedRange
+    ? { source: camera.target, range: camera.selectedRange }
+    : undefined;
 
   return (
-    <div className="semantic-workspace">
-      <div className="row workspace-history-row">
-        <Breadcrumbs document={doc} camera={camera} onJump={jump} />
-        <div className="doc-history-controls">
-          <button onClick={edit.onUndo} disabled={!edit.canUndo} title="Undo (Ctrl+Z)">
-            ↶ Undo
-          </button>
-          <button onClick={edit.onRedo} disabled={!edit.canRedo} title="Redo (Ctrl+Shift+Z)">
-            ↷ Redo
-          </button>
+    <>
+      <div className="workbench-center">
+        <div className="row workbench-history-row">
+          {doc ? <Breadcrumbs document={doc} camera={camera} onJump={jump} /> : <span className="breadcrumbs" />}
+          <div className="doc-history-controls">
+            <button onClick={edit.onUndo} disabled={!edit.canUndo} title="Undo (Ctrl+Z)">
+              ↶ Undo
+            </button>
+            <button onClick={edit.onRedo} disabled={!edit.canRedo} title="Redo (Ctrl+Shift+Z)">
+              ↷ Redo
+            </button>
+          </div>
+        </div>
+        <div className="workbench-stage">
+          {doc ? (
+            <SemanticStage
+              document={doc}
+              focus={camera.target}
+              selection={selection}
+              onDive={dive}
+              onSelect={(sel) => selectRange(sel.range)}
+              onDocumentChange={edit.onDocumentChange}
+            />
+          ) : (
+            <p className="hint">Build or load a packet to explore it here.</p>
+          )}
         </div>
       </div>
-      <div className="semantic-workspace-grid">
-        <PacketOutline document={doc} focus={camera.target} onJump={jump} />
-        <div className="semantic-workspace-stage">
-          <SemanticStage
-            document={doc}
-            focus={camera.target}
-            selection={camera.selectedRange ? { source: camera.target, range: camera.selectedRange } : undefined}
-            onDive={dive}
-            onSelect={(selection) => selectRange(selection.range)}
-            onDocumentChange={edit.onDocumentChange}
+
+      <aside className="workbench-right">
+        {mode === "compose" && (
+          <LayerInspector
+            entry={composer.selectedEntry}
+            layer={composer.selectedLayer}
+            onValue={composer.setValue}
+            onMode={composer.setMode}
           />
+        )}
+        <div className="workbench-diagnostics">
+          <DiagnosticsPanel diagnostics={doc?.diagnostics ?? []} selectedRange={camera.selectedRange} />
         </div>
-        <div className="workspace-diagnostics">
-          <DiagnosticsPanel diagnostics={doc.diagnostics} selectedRange={camera.selectedRange} />
-        </div>
+      </aside>
+
+      <div className="workbench-rail">
+        <HexBitRail
+          buffer={doc?.buffer ?? ""}
+          document={doc ?? undefined}
+          selectedRange={camera.selectedRange}
+          diagnostics={doc?.diagnostics ?? []}
+          onSelectRange={selectRange}
+        />
       </div>
-      <HexBitRail buffer={doc.buffer} selectedRange={camera.selectedRange} diagnostics={doc.diagnostics} />
-    </div>
+    </>
   );
 }
 
 export default function Workspace({ active }: { active: boolean }) {
-  const [stackText, setStackText] = useState("");
-  // "compose" builds a stack visually (the default entry point); "spec" edits the raw
-  // ProtocolSpec[] JSON; "bytes" dissects a raw hex capture backward. All three feed the same doc,
-  // so the whole workspace works on any of them.
-  const [inputMode, setInputMode] = useState<"compose" | "spec" | "bytes">("compose");
-  const [hexText, setHexText] = useState("");
   const [docState, dispatchDoc] = useReducer(documentHistoryReducer, INITIAL_DOCUMENT_HISTORY);
   const doc = docState.current;
   const [error, setError] = useState<string | null>(null);
 
-  const [inspectText, setInspectText] = useState("");
-  const [inspectDoc, setInspectDoc] = useState<PacketDocument | null>(null);
-  const [inspectError, setInspectError] = useState<string | null>(null);
+  const [inputMode, setInputMode] = useState<InputMode>("compose");
+  const [stackText, setStackText] = useState("");
+  const [hexText, setHexText] = useState("");
+  const [loadText, setLoadText] = useState("");
+  const [showJson, setShowJson] = useState(false);
 
   const edit = useMemo<DocumentEditApi>(
     () => ({
@@ -172,8 +154,23 @@ export default function Workspace({ active }: { active: boolean }) {
     [docState],
   );
 
-  async function assemble(protocols: ProtocolSpec[]) {
+  const composer = useComposer(
+    (d) => dispatchDoc({ type: "SET", document: d }),
+    setError,
+  );
+
+  // Seed the Spec-mode textarea with the default stack for when the user switches to it. The
+  // initial assemble is driven by the composer (the default mode), which seeds the same stack.
+  useEffect(() => {
+    (async () => {
+      const stack = await invoke<ProtocolSpec[]>("default_stack");
+      setStackText(JSON.stringify(stack, null, 2));
+    })();
+  }, []);
+
+  async function onAssembleSpec() {
     try {
+      const protocols: ProtocolSpec[] = JSON.parse(stackText);
       const built = await invoke<PacketDocument>("create_packet", { protocols });
       dispatchDoc({ type: "SET", document: built });
       setError(null);
@@ -182,26 +179,7 @@ export default function Workspace({ active }: { active: boolean }) {
     }
   }
 
-  // Seed the Spec-mode textarea with the default stack for when the user switches to it. The
-  // initial assemble is driven by the Composer (the default mode), which seeds and builds the same
-  // stack itself — so we don't also assemble here and race two SETs onto the document.
-  useEffect(() => {
-    (async () => {
-      const stack = await invoke<ProtocolSpec[]>("default_stack");
-      setStackText(JSON.stringify(stack, null, 2));
-    })();
-  }, []);
-
-  async function onAssembleClick() {
-    try {
-      const protocols: ProtocolSpec[] = JSON.parse(stackText);
-      await assemble(protocols);
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-
-  async function onDissectClick() {
+  async function onDissect() {
     try {
       const dissected = await invoke<PacketDocument>("dissect_hex", { hex: hexText });
       dispatchDoc({ type: "SET", document: dissected });
@@ -211,60 +189,73 @@ export default function Workspace({ active }: { active: boolean }) {
     }
   }
 
-  async function onInspectClick() {
+  async function onLoad() {
     try {
-      const loaded = await invoke<PacketDocument>("inspect_packet", { documentJson: inspectText });
-      setInspectDoc(loaded);
-      setInspectError(null);
+      const loaded = await invoke<PacketDocument>("inspect_packet", { documentJson: loadText });
+      dispatchDoc({ type: "SET", document: loaded });
+      setError(null);
     } catch (e) {
-      setInspectError(String(e));
+      setError(String(e));
     }
   }
 
-  function sendToInspector() {
-    if (!doc) return;
-    setInspectText(JSON.stringify(doc, null, 2));
-  }
+  const MODES: { id: InputMode; label: string }[] = [
+    { id: "compose", label: "Compose" },
+    { id: "spec", label: "Spec JSON" },
+    { id: "dissect", label: "Dissect bytes" },
+    { id: "load", label: "Load JSON" },
+  ];
 
   return (
-    <SplitPane
-      direction="horizontal"
-      defaultSize={760}
-      minSize={480}
-      minSecondSize={260}
-      storageKey="split.build-inspect"
-      active={active}
-      first={
-        <section className="pane">
-          <h2>Build</h2>
-          <div className="edit-mode-toggle" role="radiogroup" aria-label="Input mode">
-            <button
-              className={inputMode === "compose" ? "theme-option active" : "theme-option"}
-              aria-pressed={inputMode === "compose"}
-              onClick={() => setInputMode("compose")}
-            >
-              Compose
-            </button>
-            <button
-              className={inputMode === "spec" ? "theme-option active" : "theme-option"}
-              aria-pressed={inputMode === "spec"}
-              onClick={() => setInputMode("spec")}
-            >
-              Spec JSON
-            </button>
-            <button
-              className={inputMode === "bytes" ? "theme-option active" : "theme-option"}
-              aria-pressed={inputMode === "bytes"}
-              onClick={() => setInputMode("bytes")}
-            >
-              Dissect bytes
-            </button>
+    <WorkspaceProvider>
+      <div className="workbench">
+        <aside className="workbench-left">
+          <div className="edit-mode-toggle workbench-modes" role="radiogroup" aria-label="Input mode">
+            {MODES.map((m) => (
+              <button
+                key={m.id}
+                className={inputMode === m.id ? "theme-option active" : "theme-option"}
+                aria-pressed={inputMode === m.id}
+                onClick={() => setInputMode(m.id)}
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
+
           {inputMode === "compose" && (
-            <Composer onDocument={(d) => dispatchDoc({ type: "SET", document: d })} onError={setError} />
+            <div className="workbench-compose">
+              <div className="row workbench-compose-actions">
+                <button onClick={() => composer.assemble()} disabled={composer.model.layers.length === 0}>
+                  Assemble
+                </button>
+                <button className="composer-code-toggle" onClick={() => setShowJson((v) => !v)}>
+                  {showJson ? "Hide JSON" : "Show JSON"}
+                </button>
+              </div>
+              <StackView
+                model={composer.model}
+                catalog={composer.catalog}
+                selectedKey={composer.selectedKey}
+                onSelect={composer.select}
+                onMove={composer.move}
+                onRemove={composer.remove}
+              />
+              <ProtocolPalette catalog={composer.catalog} candidates={composer.candidates} onAdd={composer.add} />
+              {showJson && (
+                <textarea
+                  className="json-editor small composer-code"
+                  readOnly
+                  value={composer.payloadJson}
+                  spellCheck={false}
+                  aria-label="Composed packet JSON (read-only)"
+                />
+              )}
+            </div>
           )}
+
           {inputMode === "spec" && (
-            <>
+            <div className="workbench-input">
               <p className="hint">Edit the protocol stack (an array of `ProtocolSpec`) and assemble it.</p>
               <textarea
                 className="json-editor small"
@@ -273,18 +264,15 @@ export default function Workspace({ active }: { active: boolean }) {
                 spellCheck={false}
               />
               <div className="row">
-                <button onClick={onAssembleClick}>Assemble</button>
-                <button onClick={sendToInspector} disabled={!doc}>
-                  Send to Inspect →
-                </button>
+                <button onClick={onAssembleSpec}>Assemble</button>
               </div>
-            </>
+            </div>
           )}
-          {inputMode === "bytes" && (
-            <>
+
+          {inputMode === "dissect" && (
+            <div className="workbench-input">
               <p className="hint">
-                Paste a raw packet's hex (an Ethernet II frame — spaces and newlines are fine) and
-                dissect it into layers and fields.
+                Paste a raw packet's hex (an Ethernet II frame — spaces and newlines are fine) and dissect it.
               </p>
               <textarea
                 className="json-editor small"
@@ -294,38 +282,36 @@ export default function Workspace({ active }: { active: boolean }) {
                 spellCheck={false}
               />
               <div className="row">
-                <button onClick={onDissectClick} disabled={!hexText.trim()}>
+                <button onClick={onDissect} disabled={!hexText.trim()}>
                   Dissect
                 </button>
               </div>
-            </>
+            </div>
           )}
+
+          {inputMode === "load" && (
+            <div className="workbench-input">
+              <p className="hint">Paste a packet document's JSON and load it — bytes never change, only diagnostics.</p>
+              <textarea
+                className="json-editor small"
+                value={loadText}
+                onChange={(e) => setLoadText(e.currentTarget.value)}
+                placeholder="Paste packet document JSON here…"
+                spellCheck={false}
+              />
+              <div className="row">
+                <button onClick={onLoad} disabled={!loadText.trim()}>
+                  Load
+                </button>
+              </div>
+            </div>
+          )}
+
           {error && <p className="error">{error}</p>}
-          <WorkspaceProvider>
-            <SemanticWorkspace doc={doc} active={active} edit={edit} />
-          </WorkspaceProvider>
-        </section>
-      }
-      second={
-        <section className="pane">
-          <h2>Inspect</h2>
-          <p className="hint">Paste a packet document's JSON and load it — bytes never change, only diagnostics.</p>
-          <textarea
-            className="json-editor"
-            value={inspectText}
-            onChange={(e) => setInspectText(e.currentTarget.value)}
-            placeholder="Paste packet document JSON here…"
-            spellCheck={false}
-          />
-          <div className="row">
-            <button onClick={onInspectClick} disabled={!inspectText}>
-              Inspect
-            </button>
-          </div>
-          {inspectError && <p className="error">{inspectError}</p>}
-          {inspectDoc && <InspectPacketTree doc={inspectDoc} />}
-        </section>
-      }
-    />
+        </aside>
+
+        <WorkbenchStage doc={doc} active={active} edit={edit} composer={composer} mode={inputMode} />
+      </div>
+    </WorkspaceProvider>
   );
 }

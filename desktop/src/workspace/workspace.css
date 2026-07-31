@@ -397,18 +397,45 @@
   border-color: var(--accent-2);
 }
 
+/* In-place derivation (UI redesign phase 5): the read-only op tree expanded inside FieldDetail,
+   so a derived field's computation is visible without leaving the packet. */
+.field-derivation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.field-derivation-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.field-derivation-inline .viewport {
+  min-height: 220px;
+  border-color: var(--accent-2);
+}
+
+.derivation-fullview {
+  align-self: flex-end;
+  font-size: 0.85em;
+  color: var(--accent-2-soft-text);
+  background: transparent;
+  border-color: var(--accent-2);
+}
+
 /* ---- fallback ---- */
 
 .projection-fallback {
   color: var(--text-faint);
 }
 
-/* ---- hex bit rail ---- */
+/* ---- hex bit rail (hex / ascii / bits, bidirectional — UI redesign phase 4) ---- */
 
 .hex-bit-rail {
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -416,12 +443,40 @@
   font-size: 0.8em;
 }
 
+.hex-rail-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.hex-rail-count {
+  color: var(--text-faint);
+  font-size: 0.9em;
+}
+
+.hex-rail-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
 .hex-byte {
   padding: 0.15em 0.3em;
   border-radius: 3px;
+  cursor: pointer;
 }
 
-.hex-byte-selected {
+.hex-byte:hover {
+  background: var(--bg-subtle);
+}
+
+.hex-byte:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.hex-byte-selected,
+.hex-byte-selected:hover {
   background: var(--accent-soft-bg);
   color: var(--accent-soft-text);
 }
@@ -429,6 +484,30 @@
 .hex-byte-diagnosed {
   outline: 2px solid var(--warn);
   outline-offset: -1px;
+}
+
+/* Bits view: eight bit glyphs per byte cell, each independently highlightable. */
+.hex-rail-bits .hex-byte {
+  display: inline-flex;
+  gap: 1px;
+  padding: 0.15em 0.25em;
+}
+
+.hex-bit {
+  padding: 0 1px;
+  border-radius: 2px;
+  color: var(--text-muted);
+}
+
+.hex-bit-selected {
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
+}
+
+.hex-ascii-char {
+  display: inline-block;
+  min-width: 1ch;
+  text-align: center;
 }
 
 /* ---- diagnostics cross-highlight ---- */
@@ -612,4 +691,188 @@
 
 .composer-code {
   min-height: 120px;
+}
+
+/* ---- workbench rail layout (UI redesign, phase 2) ---- */
+
+.workbench {
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr) 300px;
+  grid-template-areas:
+    "left center right"
+    "rail rail rail";
+  gap: 0.6rem;
+  align-items: start;
+}
+
+.workbench-left {
+  grid-area: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.workbench-center {
+  grid-area: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.workbench-right {
+  grid-area: right;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.workbench-rail {
+  grid-area: rail;
+}
+
+.workbench-modes {
+  flex-wrap: wrap;
+}
+
+.workbench-compose,
+.workbench-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.workbench-compose-actions {
+  gap: 0.5rem;
+}
+
+.workbench-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.workbench-stage {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  padding: 0.75rem 0.9rem;
+  min-height: 380px;
+}
+
+.workbench-diagnostics {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  padding: 0.6rem 0.75rem;
+}
+
+/* In the rails, the composer sub-panels are the panels themselves — let them fill the rail width. */
+.workbench-left .composer-palette,
+.workbench-left .composer-stack,
+.workbench-right .composer-inspector {
+  width: 100%;
+}
+
+/* ---- bit-width-aware layer diagram (UI redesign, phase 3) ---- */
+
+.layer-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.layer-diagram-ruler,
+.layer-diagram-row {
+  display: grid;
+  grid-template-columns: repeat(32, 1fr);
+}
+
+.layer-diagram-ruler {
+  margin-bottom: 1px;
+}
+
+.ruler-tick {
+  font-size: 0.62rem;
+  color: var(--text-faint);
+  border-left: 1px solid var(--border);
+  padding-left: 3px;
+}
+
+.layer-diagram-row {
+  min-height: 2.6em;
+}
+
+.diag-field {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  margin: 1px;
+  padding: 0.2em 0.4em;
+  border: 1px solid var(--accent-border-soft);
+  border-radius: 5px;
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+
+.diag-field:hover {
+  border-color: var(--accent);
+}
+
+.diag-field:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.diag-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.diag-derived {
+  background: var(--accent-2-soft-bg);
+  color: var(--accent-2-soft-text);
+  border-color: var(--accent-2);
+}
+
+.diag-pinned {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.diag-name {
+  font-weight: 600;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diag-value {
+  font-size: 0.7rem;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diag-gap {
+  margin: 1px;
+  border-radius: 5px;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--bg-subtle),
+    var(--bg-subtle) 4px,
+    transparent 4px,
+    transparent 8px
+  );
 }

@@ -915,3 +915,147 @@ button:disabled {
 :root[data-theme="dark"] .theme-option.active {
   background: #363b48;
 }
+
+/* ---- application shell (UI redesign, phase 1) ---- */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+#root {
+  height: 100%;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.9rem 0.7rem;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow-y: auto;
+}
+
+.app-nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.2rem 0.5rem 0.9rem;
+}
+
+.app-nav-logo {
+  font-size: 1.5rem;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.app-nav-title {
+  font-weight: 700;
+  font-size: 1.02rem;
+}
+
+.app-nav-tagline {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.app-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.app-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.5em 0.7em;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  font-size: 0.9rem;
+}
+
+.app-nav-item:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.app-nav-item.active {
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
+  font-weight: 600;
+}
+
+.app-nav-icon {
+  width: 1.2em;
+  text-align: center;
+  opacity: 0.85;
+}
+
+.app-nav-spacer {
+  flex: 1 1 auto;
+}
+
+.app-main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.command-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.command-bar-titles {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.command-bar-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.command-bar-subtitle {
+  color: var(--text-faint);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.app-content {
+  overflow: auto;
+  padding: 1.1rem 1.25rem;
+}

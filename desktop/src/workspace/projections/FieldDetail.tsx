@@ -13,6 +13,7 @@ import {
   structuredErrorMessage,
   structuredPlaceholder,
 } from "../fieldEdit";
+import DerivationView, { looksLikeOperation } from "./DerivationView";
 
 type FieldFocus = Extract<FocusTarget, { kind: "field" }>;
 
@@ -60,6 +61,7 @@ export default function FieldDetail({
   const [editMode, setEditMode] = useState<"structured" | "raw">("structured");
   const [pending, setPending] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [showDerivation, setShowDerivation] = useState(false);
 
   // Re-syncs both drafts on a focus change (a different field) *and* on a document swap for the
   // same field — the latter matters because undo/redo replaces `document` out from under an open
@@ -76,6 +78,8 @@ export default function FieldDetail({
   // field shouldn't silently flip a user's manual "Raw" choice back to "Structured".
   useEffect(() => {
     setEditMode(field && hasStructuredEditor(field.kind) ? "structured" : "raw");
+    // Collapse the in-place derivation when moving to a different field (a per-field UI preference).
+    setShowDerivation(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus.layerId, focus.fieldId]);
 
@@ -270,15 +274,29 @@ export default function FieldDetail({
         )}
       </div>
 
-      {field.derivation && (
-        <button
-          className="view-derivation"
-          onClick={() =>
-            onDive({ kind: "operation", layerId: focus.layerId, fieldId: focus.fieldId, operationId: "root" })
-          }
-        >
-          View derivation →
-        </button>
+      {field.derivation && looksLikeOperation(field.derivation) && (
+        <div className="field-derivation">
+          <button
+            className="view-derivation"
+            aria-expanded={showDerivation}
+            onClick={() => setShowDerivation((v) => !v)}
+          >
+            {showDerivation ? "▾ Derivation" : "▸ Show derivation"}
+          </button>
+          {showDerivation && (
+            <div className="field-derivation-inline">
+              <DerivationView op={field.derivation} />
+              <button
+                className="derivation-fullview"
+                onClick={() =>
+                  onDive({ kind: "operation", layerId: focus.layerId, fieldId: focus.fieldId, operationId: "root" })
+                }
+              >
+                Open full view →
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </>
   );
