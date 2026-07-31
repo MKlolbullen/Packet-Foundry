@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { PacketDiff, PacketDocument, ProtocolSpec } from "../types";
 import { bytesToHex } from "../hex";
 import { LINKTYPE_ETHERNET, frameTimestamp, parsePcap, type PcapFrame } from "../pcap";
+import { summarizeFrame } from "../framePeek";
 import ProtocolPalette from "../composer/ProtocolPalette";
 import StackView from "../composer/StackView";
 import LayerInspector from "../composer/LayerInspector";
@@ -191,6 +192,7 @@ export default function Workspace({ active }: { active: boolean }) {
   const [pcapFrames, setPcapFrames] = useState<PcapFrame[] | null>(null);
   const [pcapMeta, setPcapMeta] = useState<PcapMeta | null>(null);
   const [pcapFrameIndex, setPcapFrameIndex] = useState<number | null>(null);
+  const [pcapFilter, setPcapFilter] = useState("");
   const [showJson, setShowJson] = useState(false);
   const [diff, setDiff] = useState<PacketDiff | null>(null);
   const [variants, dispatchVariants] = useReducer(variantsReducer, INITIAL_VARIANT_STATE);
@@ -207,6 +209,20 @@ export default function Workspace({ active }: { active: boolean }) {
     }),
     [docState],
   );
+
+  // Shallow protocol peek per frame for the list labels; recomputed only when a new file is opened.
+  const pcapRows = useMemo(
+    () => (pcapFrames ?? []).map((frame) => ({ frame, summary: summarizeFrame(frame.data) })),
+    [pcapFrames],
+  );
+  const visiblePcapRows = useMemo(() => {
+    const q = pcapFilter.trim().toLowerCase();
+    if (!q) return pcapRows;
+    return pcapRows.filter(
+      ({ frame, summary }) =>
+        `#${frame.index} ${summary.label} ${summary.info}`.toLowerCase().includes(q),
+    );
+  }, [pcapRows, pcapFilter]);
 
   const composer = useComposer(
     (d) => dispatchDoc({ type: "SET", document: d }),
@@ -500,8 +516,18 @@ export default function Workspace({ active }: { active: boolean }) {
                   )}
                   {pcapMeta.truncated && <p className="hint pcap-warn">Capture was truncated; showing the frames read.</p>}
                   {pcapMeta.capped && <p className="hint pcap-warn">Large capture — showing the first {pcapFrames.length} frames.</p>}
+                  {pcapFrames.length > 1 && (
+                    <input
+                      className="pcap-filter"
+                      type="text"
+                      value={pcapFilter}
+                      onChange={(e) => setPcapFilter(e.currentTarget.value)}
+                      placeholder="Filter (e.g. TCP, DNS, 192.168…)"
+                      spellCheck={false}
+                    />
+                  )}
                   <ul className="pcap-frames">
-                    {pcapFrames.map((f) => {
+                    {visiblePcapRows.map(({ frame: f, summary }) => {
                       const t0 = pcapFrames[0];
                       const delta = frameTimestamp(f, pcapMeta.nanos) - frameTimestamp(t0, pcapMeta.nanos);
                       return (
@@ -509,14 +535,17 @@ export default function Workspace({ active }: { active: boolean }) {
                           <button
                             className={pcapFrameIndex === f.index ? "pcap-frame active" : "pcap-frame"}
                             onClick={() => onPickFrame(f)}
+                            title={`#${f.index} · +${delta.toFixed(6)}s · ${summary.info || summary.label}`}
                           >
                             <span className="pcap-frame-idx">#{f.index}</span>
-                            <span className="pcap-frame-time">+{delta.toFixed(6)}s</span>
+                            <span className="pcap-frame-proto">{summary.label}</span>
+                            <span className="pcap-frame-info">{summary.info}</span>
                             <span className="pcap-frame-len">{f.origLen} B</span>
                           </button>
                         </li>
                       );
                     })}
+                    {visiblePcapRows.length === 0 && <li className="hint pcap-empty">No frames match “{pcapFilter}”.</li>}
                   </ul>
                 </div>
               )}
