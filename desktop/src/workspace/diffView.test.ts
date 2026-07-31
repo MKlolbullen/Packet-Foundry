@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { PacketDiff, PacketDocument } from "../types";
-import { changeBadgeLabel, fieldRangeInDoc, hasChanges, stateTransitionLabel } from "./diffView";
+import type { FieldChange, PacketDiff, PacketDocument } from "../types";
+import { changeBadgeLabel, diffSummary, fieldRangeInDoc, hasChanges, stateTransitionLabel } from "./diffView";
 
 const EMPTY_DIFF: PacketDiff = {
   layers: [{ name: "IPv4", status: "unchanged", fields_added: [], fields_removed: [], fields_changed: [] }],
@@ -69,6 +69,47 @@ describe("hasChanges", () => {
     expect(
       hasChanges({ ...EMPTY_DIFF, layers: [{ name: "Payload", status: "added", fields_added: [], fields_removed: [], fields_changed: [] }] }),
     ).toBe(true);
+  });
+});
+
+describe("diffSummary", () => {
+  const fd = (name: string, change: FieldChange) => ({
+    name,
+    kind: "uint" as const,
+    range_before: { start_bit: 0, len_bits: 8 },
+    range_after: { start_bit: 0, len_bits: 8 },
+    state_before: "plain" as const,
+    state_after: "plain" as const,
+    value_before: "0",
+    value_after: "1",
+    change,
+  });
+
+  it("is all-zero for an unchanged diff", () => {
+    expect(diffSummary(EMPTY_DIFF)).toEqual({ direct: 0, consequence: 0, added: 0, removed: 0, total: 0 });
+  });
+
+  it("counts direct edits, consequences (incl. state-only), and added/removed layers + fields", () => {
+    const diff: PacketDiff = {
+      layers: [
+        {
+          name: "IPv4",
+          status: "modified",
+          fields_added: [],
+          fields_removed: [{ name: "Opt", kind: "bytes", range: { start_bit: 0, len_bits: 8 }, state: "plain", value: "x" }],
+          fields_changed: [fd("TTL", "direct_edit"), fd("Checksum", "derived_consequence"), fd("Flags", "state_only")],
+        },
+        { name: "Payload", status: "added", fields_added: [fd("Data", "direct_edit") as never], fields_removed: [], fields_changed: [] },
+      ],
+      bytes: { changed: [], len_before: 0, len_after: 0 },
+      diagnostics: { added: [], removed: [] },
+    };
+    const s = diffSummary(diff);
+    expect(s.direct).toBe(1);
+    expect(s.consequence).toBe(2); // derived_consequence + state_only
+    expect(s.added).toBe(2); // the added layer + its one added field
+    expect(s.removed).toBe(1); // one removed field
+    expect(s.total).toBe(6);
   });
 });
 

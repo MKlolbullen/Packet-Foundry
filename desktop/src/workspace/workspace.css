@@ -1000,3 +1000,108 @@ button.changes-field:disabled {
   font-size: 0.8em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+
+/* ---- variant chips (branch tabs) ---- */
+
+.variants-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.variant-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  padding: 0 0.2rem 0 0;
+  overflow: hidden;
+}
+
+.variant-chip.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.variant-chip.base {
+  border-color: var(--accent);
+}
+
+.variant-chip-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: inherit;
+  padding: 0.25em 0.6em;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.variant-chip.active .variant-chip-select {
+  color: var(--accent-soft-text);
+}
+
+.variant-chip-label {
+  font-weight: 600;
+}
+
+.variant-chip-base-tag {
+  font-size: 0.72em;
+  color: var(--accent-soft-text);
+  background: var(--accent-soft-bg);
+  border-radius: 8px;
+  padding: 0 0.4em;
+  font-weight: 400;
+}
+
+.variant-chip-count {
+  font-size: 0.85em;
+  color: var(--text-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.variant-chip-icon {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--text-faint);
+  padding: 0 0.3em;
+  font-size: 0.9em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.variant-chip-icon:hover {
+  color: var(--accent);
+}
+
+.variant-chip-input {
+  border: none;
+  background: var(--bg-subtle);
+  color: var(--text);
+  padding: 0.25em 0.6em;
+  font-size: 0.85em;
+  font-weight: 600;
+  width: 8em;
+  border-radius: 999px;
+}
+
+.variant-chip-save {
+  border-radius: 999px;
+  padding: 0.25em 0.7em;
+  font-size: 0.85em;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.variant-chip-save:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-soft-text);
+}
