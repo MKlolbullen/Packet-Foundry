@@ -1165,3 +1165,96 @@ button.changes-field:disabled {
   text-overflow: ellipsis;
   color: var(--success);
 }
+
+/* ---- .pcap import: file picker + frame list ---- */
+.pcap-file {
+  font-size: 0.82em;
+  color: var(--text-muted);
+  margin-bottom: 0.5em;
+}
+
+.pcap-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+}
+
+.pcap-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5em;
+  font-size: 0.8em;
+}
+
+.pcap-file-name {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pcap-frame-count {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
+.pcap-warn {
+  color: var(--warn);
+  margin: 0;
+}
+
+.pcap-frames {
+  list-style: none;
+  margin: 0.2em 0 0;
+  padding: 0;
+  max-height: 420px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pcap-frame {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.2em 0.45em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8em;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.pcap-frame:hover {
+  border-color: var(--accent);
+  background: var(--bg-subtle);
+}
+
+.pcap-frame.active {
+  border-color: var(--accent);
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
+}
+
+.pcap-frame-idx {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  min-width: 3em;
+}
+
+.pcap-frame-time {
+  flex: 1 1 auto;
+  color: var(--text-muted);
+}
+
+.pcap-frame-len {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
