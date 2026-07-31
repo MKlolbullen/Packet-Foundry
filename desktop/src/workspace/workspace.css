@@ -613,3 +613,87 @@
 .composer-code {
   min-height: 120px;
 }
+
+/* ---- workbench rail layout (UI redesign, phase 2) ---- */
+
+.workbench {
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr) 300px;
+  grid-template-areas:
+    "left center right"
+    "rail rail rail";
+  gap: 0.6rem;
+  align-items: start;
+}
+
+.workbench-left {
+  grid-area: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.workbench-center {
+  grid-area: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.workbench-right {
+  grid-area: right;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.workbench-rail {
+  grid-area: rail;
+}
+
+.workbench-modes {
+  flex-wrap: wrap;
+}
+
+.workbench-compose,
+.workbench-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.workbench-compose-actions {
+  gap: 0.5rem;
+}
+
+.workbench-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.workbench-stage {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  padding: 0.75rem 0.9rem;
+  min-height: 380px;
+}
+
+.workbench-diagnostics {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  padding: 0.6rem 0.75rem;
+}
+
+/* In the rails, the composer sub-panels are the panels themselves — let them fill the rail width. */
+.workbench-left .composer-palette,
+.workbench-left .composer-stack,
+.workbench-right .composer-inspector {
+  width: 100%;
+}
