@@ -82,7 +82,9 @@ function ipSummary(parts: string[], name: string, d: Uint8Array, o: number, v6: 
 
   parts.push(protoName(proto));
   let info = `${src} → ${dst}`;
-  if ((proto === 6 || proto === 17) && l4 + 4 <= d.length) {
+  // Only read ports when the transport header is where it should be — a malformed IPv4 IHL below
+  // the 20-byte minimum would otherwise point `l4` back into the IP header and mislabel ports.
+  if ((proto === 6 || proto === 17) && l4 >= o + minHdr && l4 + 4 <= d.length) {
     const sp = be16(d, l4);
     const dp = be16(d, l4 + 2);
     info = `${src}:${sp} → ${dst}:${dp}`;

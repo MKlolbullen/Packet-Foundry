@@ -358,6 +358,7 @@ export default function Workspace({ active }: { active: boolean }) {
         fileName: file.name,
       });
       setPcapFrameIndex(null);
+      setPcapFilter(""); // a filter from a previous file must not hide the new capture's frames
       setError(cap.frames.length === 0 ? "No frames in this capture." : null);
     } catch (e) {
       setPcapFrames(null);
@@ -527,9 +528,10 @@ export default function Workspace({ active }: { active: boolean }) {
                     />
                   )}
                   <ul className="pcap-frames">
-                    {visiblePcapRows.map(({ frame: f, summary }) => {
-                      const t0 = pcapFrames[0];
-                      const delta = frameTimestamp(f, pcapMeta.nanos) - frameTimestamp(t0, pcapMeta.nanos);
+                    {(() => {
+                      const t0 = frameTimestamp(pcapFrames[0], pcapMeta.nanos);
+                      return visiblePcapRows.map(({ frame: f, summary }) => {
+                      const delta = frameTimestamp(f, pcapMeta.nanos) - t0;
                       return (
                         <li key={f.index}>
                           <button
@@ -544,7 +546,8 @@ export default function Workspace({ active }: { active: boolean }) {
                           </button>
                         </li>
                       );
-                    })}
+                      });
+                    })()}
                     {visiblePcapRows.length === 0 && <li className="hint pcap-empty">No frames match “{pcapFilter}”.</li>}
                   </ul>
                 </div>

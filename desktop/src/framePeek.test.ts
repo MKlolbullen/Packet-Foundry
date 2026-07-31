@@ -73,4 +73,12 @@ describe("summarizeFrame", () => {
     const frame = new Uint8Array(eth(0x0800, ipv4(89, IP_A, IP_B))); // OSPF
     expect(summarizeFrame(frame)).toEqual({ label: "IPv4/proto 89", info: "192.168.1.10 → 192.168.1.20" });
   });
+
+  it("skips port parsing when the IPv4 IHL is below the 20-byte minimum", () => {
+    // A corrupt IHL of 3 (12 bytes) would point L4 back inside the header; ports must be skipped.
+    const header = ipv4(6, IP_A, IP_B, ports(1, 2));
+    header[0] = 0x43; // version 4, IHL 3
+    const frame = new Uint8Array(eth(0x0800, header));
+    expect(summarizeFrame(frame)).toEqual({ label: "IPv4/TCP", info: "192.168.1.10 → 192.168.1.20" });
+  });
 });
