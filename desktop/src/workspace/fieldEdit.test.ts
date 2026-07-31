@@ -26,13 +26,14 @@ describe("hasStructuredEditor", () => {
     expect(hasStructuredEditor("flags")).toBe(true);
     expect(hasStructuredEditor("mac_addr")).toBe(true);
     expect(hasStructuredEditor("ipv4_addr")).toBe(true);
+    expect(hasStructuredEditor("ipv6_addr")).toBe(true);
     expect(hasStructuredEditor("bytes")).toBe(false);
   });
 });
 
 describe("structuredPlaceholder / structuredErrorMessage", () => {
   it("returns a non-empty hint for every structured kind", () => {
-    for (const kind of ["uint", "flags", "mac_addr", "ipv4_addr"] as const) {
+    for (const kind of ["uint", "flags", "mac_addr", "ipv4_addr", "ipv6_addr"] as const) {
       expect(structuredPlaceholder(kind).length).toBeGreaterThan(0);
       expect(structuredErrorMessage(kind).length).toBeGreaterThan(0);
     }
@@ -72,6 +73,16 @@ describe("structuredDraftFor / parseStructuredValue round-trips", () => {
     expect(parseStructuredValue("ipv4_addr", draft, 32)).toEqual(new Uint8Array([192, 168, 1, 20]));
   });
 
+  it("ipv6_addr: seeds full 8-group hex and round-trips", () => {
+    const field: Field = { id: 2, name: "Src", range: { start_bit: 0, len_bits: 128 }, kind: "ipv6_addr" };
+    const doc = docWithField("20010db8000000000000000000000001", field);
+    const draft = structuredDraftFor(doc, field);
+    expect(draft).toBe("2001:0db8:0000:0000:0000:0000:0000:0001");
+    expect(parseStructuredValue("ipv6_addr", draft, 128)).toEqual(
+      new Uint8Array([0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
+    );
+  });
+
   it("returns '' for an out-of-bounds field instead of an error sentinel", () => {
     const field: Field = { id: 2, name: "Ghost", range: { start_bit: 800, len_bits: 8 }, kind: "uint" };
     const doc = docWithField("2a", field);
@@ -103,6 +114,19 @@ describe("parseStructuredValue validation failures", () => {
     expect(parseStructuredValue("ipv4_addr", "192.168.1", 32)).toBeNull();
     expect(parseStructuredValue("ipv4_addr", "256.0.0.1", 32)).toBeNull();
     expect(parseStructuredValue("ipv4_addr", "007.0.0.1", 32)).toEqual(new Uint8Array([7, 0, 0, 1]));
+  });
+
+  it("ipv6_addr requires exactly 8 full-form groups (no :: shorthand)", () => {
+    // Fewer than 8 groups — `::` compression is deliberately unsupported.
+    expect(parseStructuredValue("ipv6_addr", "2001:db8::1", 128)).toBeNull();
+    expect(parseStructuredValue("ipv6_addr", "2001:0db8:0:0:0:0:0", 128)).toBeNull();
+    // A group with more than 4 hex digits, and a non-hex group.
+    expect(parseStructuredValue("ipv6_addr", "20011:0:0:0:0:0:0:1", 128)).toBeNull();
+    expect(parseStructuredValue("ipv6_addr", "zzzz:0:0:0:0:0:0:1", 128)).toBeNull();
+    // Short groups are fine (1–4 digits each).
+    expect(parseStructuredValue("ipv6_addr", "2001:db8:0:0:0:0:0:1", 128)).toEqual(
+      new Uint8Array([0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
+    );
   });
 
   it("bytes kind has no structured form", () => {

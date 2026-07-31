@@ -5,11 +5,13 @@
 pub mod arp;
 pub mod ethernet;
 pub mod icmp;
+pub mod icmpv6;
 pub mod ipv4;
 pub mod ipv6;
 pub mod raw;
 pub mod tcp;
 pub mod udp;
+pub mod vlan;
 
 /// The IP pseudo-header a transport (TCP/UDP) checksum sums before the segment itself. Lets one
 /// `tcp::layer`/`udp::layer` serve a segment carried over either IPv4 or IPv6 — the address

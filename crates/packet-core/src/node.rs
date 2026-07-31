@@ -28,6 +28,8 @@ pub enum FieldKind {
     MacAddr,
     /// 4-byte IPv4 address.
     Ipv4Addr,
+    /// 16-byte IPv6 address.
+    Ipv6Addr,
     /// Bit flags.
     Flags,
 }

@@ -18,23 +18,33 @@
 
 use packet_core::{Layer, PacketBuffer, PacketDocument};
 
-use crate::protocols::{Pseudo, arp, ethernet, icmp, ipv4, ipv6, raw, tcp, udp};
+use crate::protocols::{Pseudo, arp, ethernet, icmp, icmpv6, ipv4, ipv6, raw, tcp, udp, vlan};
 use crate::resolve::validate;
 
 const ETH_LEN: usize = ethernet::LEN;
+const VLAN_LEN: usize = vlan::LEN;
 const IPV4_MIN: usize = ipv4::LEN;
 const IPV6_LEN: usize = ipv6::LEN;
 const ARP_LEN: usize = arp::LEN;
 const TCP_MIN: usize = tcp::LEN;
 const UDP_LEN: usize = udp::LEN;
 const ICMP_LEN: usize = icmp::LEN;
+const ICMPV6_LEN: usize = icmpv6::LEN;
 
 const ETHERTYPE_IPV4: u16 = 0x0800;
 const ETHERTYPE_IPV6: u16 = 0x86DD;
 const ETHERTYPE_ARP: u16 = 0x0806;
+const ETHERTYPE_VLAN: u16 = 0x8100;
+/// 802.1ad "service VLAN" TPID — QinQ outer tag. Dissected with the same 802.1Q layout.
+const ETHERTYPE_QINQ: u16 = 0x88A8;
 const IP_PROTO_ICMP: u8 = 1;
 const IP_PROTO_TCP: u8 = 6;
 const IP_PROTO_UDP: u8 = 17;
+const IP_PROTO_ICMPV6: u8 = icmpv6::PROTO;
+
+/// Guard against a crafted chain of VLAN tags growing the layer list without bound — a real frame
+/// never stacks anywhere near this many.
+const MAX_VLAN_DEPTH: usize = 8;
 
 /// Dissect a raw byte slice (assumed to start at an Ethernet II frame) into a document. Never
 /// errors — malformed or truncated input surfaces as `Raw` regions plus diagnostics.
@@ -64,16 +74,39 @@ fn dissect_ethernet(bytes: &[u8], layers: &mut Vec<Layer>) {
     }
     layers.push(ethernet::layer(0));
     let ethertype = u16::from_be_bytes([bytes[12], bytes[13]]);
+    dissect_by_ethertype(bytes, ethertype, ETH_LEN, 0, layers);
+}
+
+/// Dispatch on an EtherType at `off`, having already placed the frame/tag that named it. `depth`
+/// counts VLAN tags seen so far, bounding the QinQ recursion. The inner EtherType of a VLAN tag
+/// re-enters here, so IPv4/IPv6/ARP after any number of tags land in the same arms.
+fn dissect_by_ethertype(bytes: &[u8], ethertype: u16, off: usize, depth: usize, layers: &mut Vec<Layer>) {
     match ethertype {
-        ETHERTYPE_IPV4 => dissect_ipv4(bytes, ETH_LEN, layers),
-        ETHERTYPE_IPV6 => dissect_ipv6(bytes, ETH_LEN, layers),
+        ETHERTYPE_IPV4 => dissect_ipv4(bytes, off, layers),
+        ETHERTYPE_IPV6 => dissect_ipv6(bytes, off, layers),
         ETHERTYPE_ARP => {
             // ARP is a leaf (no encapsulated payload); trailing padding, if any, is Raw.
-            layers.push(arp::layer(ETH_LEN));
-            push_raw(bytes, ETH_LEN + ARP_LEN, "Payload", layers);
+            layers.push(arp::layer(off));
+            push_raw(bytes, off + ARP_LEN, "Payload", layers);
         }
-        _ => push_raw(bytes, ETH_LEN, "Unknown", layers),
+        ETHERTYPE_VLAN | ETHERTYPE_QINQ => dissect_vlan(bytes, off, depth, layers),
+        _ => push_raw(bytes, off, "Unknown", layers),
     }
+}
+
+fn dissect_vlan(bytes: &[u8], off: usize, depth: usize, layers: &mut Vec<Layer>) {
+    if depth >= MAX_VLAN_DEPTH {
+        // Refuse to keep unwinding a pathological tag stack; treat the rest as opaque.
+        push_raw(bytes, off, "Unknown", layers);
+        return;
+    }
+    layers.push(vlan::layer(off));
+    if bytes.len() < off + VLAN_LEN {
+        return; // truncated tag — validate flags the out-of-bounds fields
+    }
+    // The tag's inner EtherType names what it encapsulates — recurse through the same dispatch.
+    let inner = u16::from_be_bytes([bytes[off + 2], bytes[off + 3]]);
+    dissect_by_ethertype(bytes, inner, off + VLAN_LEN, depth + 1, layers);
 }
 
 fn dissect_ipv4(bytes: &[u8], off: usize, layers: &mut Vec<Layer>) {
@@ -105,11 +138,17 @@ fn dissect_ipv6(bytes: &[u8], off: usize, layers: &mut Vec<Layer>) {
         return;
     }
     let next_header = bytes[off + 6];
-    // TCP/UDP chain with the IPv6 pseudo-header; everything else (including ICMPv6, 58) is opaque
-    // for now — ICMPv6's own pseudo-header checksum is a follow-up.
+    let pseudo = Pseudo::Ipv6 { offset: off };
     match next_header {
         IP_PROTO_TCP | IP_PROTO_UDP => {
-            dissect_transport(bytes, off + IPV6_LEN, Pseudo::Ipv6 { offset: off }, next_header, layers)
+            dissect_transport(bytes, off + IPV6_LEN, pseudo, next_header, layers)
+        }
+        IP_PROTO_ICMPV6 => {
+            // ICMPv6 (58) checksums the IPv6 pseudo-header, so it takes the same `pseudo` the
+            // transports do; the message body past the 4-byte header is opaque. A truncated header
+            // pushes no Payload (push_raw no-ops past the buffer) and validate flags the shortfall.
+            layers.push(icmpv6::layer(off + IPV6_LEN, pseudo));
+            push_raw(bytes, off + IPV6_LEN + ICMPV6_LEN, "Payload", layers);
         }
         _ => push_raw(bytes, off + IPV6_LEN, "Payload", layers),
     }
@@ -344,6 +383,110 @@ mod tests {
         assert_eq!(names, vec!["Ethernet II", "IPv6", "TCP"]);
         // Dissection reuses the same IPv6 pseudo-header derivation, so the captured checksum still
         // validates — no mismatch.
+        assert!(dissected.diagnostics.is_empty(), "dissect diagnostics: {:?}", dissected.diagnostics);
+    }
+
+    #[test]
+    fn round_trips_eth_vlan_ipv4_tcp() {
+        use crate::protocols::vlan;
+        let assembled = assemble(&[
+            ProtocolSpec::Ethernet(ethernet::EthernetParams::default()),
+            ProtocolSpec::Vlan(vlan::VlanParams { priority: 3, dei: true, vlan_id: 100 }),
+            ProtocolSpec::Ipv4(ipv4::Ipv4Params { src: [1, 2, 3, 4], dst: [5, 6, 7, 8], ..Default::default() }),
+            ProtocolSpec::Tcp(tcp::TcpParams { dst_port: 443, flags: flags::SYN, ..Default::default() }),
+        ])
+        .unwrap();
+        // The Ethernet EtherType announces the tag (0x8100); the tag's inner EtherType is IPv4.
+        let eth_type = assembled.layers[0].field("EtherType").unwrap().range;
+        assert_eq!(assembled.buffer.read_uint(eth_type).unwrap(), 0x8100);
+        let inner = assembled.layers[1].field("EtherType").unwrap().range;
+        assert_eq!(assembled.buffer.read_uint(inner).unwrap(), 0x0800);
+        // Sub-byte VLAN fields survive the round-trip bit-precisely.
+        let vid = assembled.layers[1].field("VlanId").unwrap().range;
+        assert_eq!(assembled.buffer.read_uint(vid).unwrap(), 100);
+        let pcp = assembled.layers[1].field("Priority").unwrap().range;
+        assert_eq!(assembled.buffer.read_uint(pcp).unwrap(), 3);
+        assert!(assembled.diagnostics.is_empty(), "assemble diagnostics: {:?}", assembled.diagnostics);
+
+        let dissected = dissect(assembled.buffer.as_slice());
+        let names: Vec<&str> = dissected.layers.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, vec!["Ethernet II", "802.1Q VLAN", "IPv4", "TCP"]);
+        // Field-for-field structural match, and a clean frame validates cleanly (the TCP checksum
+        // still derives over the IPv4 pseudo-header despite the tag in between).
+        for (d, a) in dissected.layers.iter().zip(&assembled.layers) {
+            assert_eq!(d.name, a.name);
+            assert_eq!(d.range, a.range);
+            for (df, af) in d.fields.iter().zip(&a.fields) {
+                assert_eq!(df.name, af.name);
+                assert_eq!(df.range, af.range);
+            }
+        }
+        assert!(dissected.diagnostics.is_empty(), "dissect diagnostics: {:?}", dissected.diagnostics);
+    }
+
+    #[test]
+    fn dissects_qinq_double_tag() {
+        // Ethernet (0x8100) → outer VLAN whose inner EtherType is again 0x8100 → inner VLAN → IPv4.
+        let mut bytes = vec![0u8; ETH_LEN];
+        bytes[12] = 0x81;
+        bytes[13] = 0x00;
+        // Outer tag: TCI then inner EtherType 0x8100.
+        bytes.extend_from_slice(&[0x00, 0x0a, 0x81, 0x00]);
+        // Inner tag: TCI then inner EtherType 0x0800 (IPv4).
+        bytes.extend_from_slice(&[0x00, 0x14, 0x08, 0x00]);
+        bytes.extend_from_slice(&[0u8; IPV4_MIN]);
+        let doc = dissect(&bytes);
+        let names: Vec<&str> = doc.layers.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, vec!["Ethernet II", "802.1Q VLAN", "802.1Q VLAN", "IPv4"]);
+    }
+
+    #[test]
+    fn vlan_recursion_is_bounded() {
+        // A frame that is nothing but 0x8100 tags forever must terminate, not blow the stack.
+        let mut bytes = vec![0u8; ETH_LEN];
+        bytes[12] = 0x81;
+        bytes[13] = 0x00;
+        for _ in 0..64 {
+            bytes.extend_from_slice(&[0x00, 0x00, 0x81, 0x00]);
+        }
+        let doc = dissect(&bytes);
+        let vlan_count = doc.layers.iter().filter(|l| l.name == "802.1Q VLAN").count();
+        assert_eq!(vlan_count, MAX_VLAN_DEPTH, "VLAN depth must be capped");
+        // Beyond the cap the remainder is opaque, not further tags.
+        assert_eq!(doc.layers.last().unwrap().name, "Unknown");
+    }
+
+    #[test]
+    fn round_trips_ipv6_icmpv6() {
+        use crate::protocols::{icmpv6, ipv6};
+        let assembled = assemble(&[
+            ProtocolSpec::Ethernet(ethernet::EthernetParams::default()),
+            ProtocolSpec::Ipv6(ipv6::Ipv6Params {
+                src: [0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                dst: [0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+                ..Default::default()
+            }),
+            ProtocolSpec::Icmpv6(icmpv6::Icmpv6Params { icmp_type: 128, code: 0 }),
+        ])
+        .unwrap();
+        // The assembler set IPv6 Next Header = 58 (ICMPv6).
+        let nh = assembled.layers[1].field("NextHeader").unwrap().range;
+        assert_eq!(assembled.buffer.read_uint(nh).unwrap(), 58);
+        // A clean assemble validates cleanly — including the ICMPv6 pseudo-header checksum.
+        assert!(assembled.diagnostics.is_empty(), "assemble diagnostics: {:?}", assembled.diagnostics);
+
+        let dissected = dissect(assembled.buffer.as_slice());
+        let names: Vec<&str> = dissected.layers.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, vec!["Ethernet II", "IPv6", "ICMPv6"]);
+        for (d, a) in dissected.layers.iter().zip(&assembled.layers) {
+            assert_eq!(d.name, a.name);
+            assert_eq!(d.range, a.range);
+            for (df, af) in d.fields.iter().zip(&a.fields) {
+                assert_eq!(df.name, af.name);
+                assert_eq!(df.range, af.range);
+            }
+        }
+        // The reused ICMPv6 checksum derivation still validates against the captured bytes.
         assert!(dissected.diagnostics.is_empty(), "dissect diagnostics: {:?}", dissected.diagnostics);
     }
 }

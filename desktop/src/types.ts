@@ -7,7 +7,7 @@ export interface BitRange {
   len_bits: number;
 }
 
-export type FieldKind = "uint" | "bytes" | "mac_addr" | "ipv4_addr" | "flags";
+export type FieldKind = "uint" | "bytes" | "mac_addr" | "ipv4_addr" | "ipv6_addr" | "flags";
 
 export interface Field {
   /** Stable identity (Rust `NodeId`, a `u64`) — `0` means unassigned. */
@@ -48,6 +48,14 @@ export interface EthernetParams {
   dst_mac: number[];
   src_mac: number[];
   ethertype: number;
+}
+
+export interface VlanParams {
+  /** Priority Code Point (0–7). */
+  priority: number;
+  dei: boolean;
+  /** VLAN identifier (0–4095). */
+  vlan_id: number;
 }
 
 export interface Ipv4Params {
@@ -102,13 +110,20 @@ export interface IcmpParams {
   sequence: number;
 }
 
+export interface Icmpv6Params {
+  icmp_type: number;
+  code: number;
+}
+
 /** Mirrors `ProtocolSpec`'s externally-tagged serde representation. */
 export type ProtocolSpec =
   | { Ethernet: EthernetParams }
+  | { Vlan: VlanParams }
   | { Ipv4: Ipv4Params }
   | { Ipv6: Ipv6Params }
   | { Arp: ArpParams }
   | { Tcp: TcpParams }
   | { Udp: UdpParams }
   | { Icmp: IcmpParams }
+  | { Icmpv6: Icmpv6Params }
   | { Raw: number[] };

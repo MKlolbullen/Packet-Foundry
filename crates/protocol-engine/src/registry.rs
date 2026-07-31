@@ -8,7 +8,7 @@ use packet_core::{PacketBuffer, PacketDocument};
 use serde::{Deserialize, Serialize};
 
 use crate::eval::EngineError;
-use crate::protocols::{Pseudo, arp, ethernet, icmp, ipv4, ipv6, raw, tcp, udp};
+use crate::protocols::{Pseudo, arp, ethernet, icmp, icmpv6, ipv4, ipv6, raw, tcp, udp, vlan};
 use crate::resolve::resolve;
 
 /// One protocol layer to place in a packet, with its parameters. Serializes externally-tagged,
@@ -16,12 +16,14 @@ use crate::resolve::resolve;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolSpec {
     Ethernet(ethernet::EthernetParams),
+    Vlan(vlan::VlanParams),
     Ipv4(ipv4::Ipv4Params),
     Ipv6(ipv6::Ipv6Params),
     Arp(arp::ArpParams),
     Tcp(tcp::TcpParams),
     Udp(udp::UdpParams),
     Icmp(icmp::IcmpParams),
+    Icmpv6(icmpv6::Icmpv6Params),
     Raw(Vec<u8>),
 }
 
@@ -44,12 +46,14 @@ impl ProtocolSpec {
     pub fn from_name(name: &str) -> Option<ProtocolSpec> {
         match name.to_ascii_lowercase().as_str() {
             "ethernet" | "eth" => Some(ProtocolSpec::Ethernet(Default::default())),
+            "vlan" | "dot1q" | "8021q" => Some(ProtocolSpec::Vlan(Default::default())),
             "ipv4" | "ip" => Some(ProtocolSpec::Ipv4(Default::default())),
             "ipv6" | "ip6" => Some(ProtocolSpec::Ipv6(Default::default())),
             "arp" => Some(ProtocolSpec::Arp(Default::default())),
             "tcp" => Some(ProtocolSpec::Tcp(Default::default())),
             "udp" => Some(ProtocolSpec::Udp(Default::default())),
             "icmp" => Some(ProtocolSpec::Icmp(Default::default())),
+            "icmpv6" | "icmp6" => Some(ProtocolSpec::Icmpv6(Default::default())),
             "raw" | "payload" => Some(ProtocolSpec::Raw(Vec::new())),
             _ => None,
         }
@@ -59,12 +63,14 @@ impl ProtocolSpec {
     pub fn name(&self) -> &'static str {
         match self {
             ProtocolSpec::Ethernet(_) => "ethernet",
+            ProtocolSpec::Vlan(_) => "vlan",
             ProtocolSpec::Ipv4(_) => "ipv4",
             ProtocolSpec::Ipv6(_) => "ipv6",
             ProtocolSpec::Arp(_) => "arp",
             ProtocolSpec::Tcp(_) => "tcp",
             ProtocolSpec::Udp(_) => "udp",
             ProtocolSpec::Icmp(_) => "icmp",
+            ProtocolSpec::Icmpv6(_) => "icmpv6",
             ProtocolSpec::Raw(_) => "raw",
         }
     }
@@ -72,14 +78,19 @@ impl ProtocolSpec {
 
 /// Assemble an ordered protocol stack into a resolved document (layout pass + resolve pass).
 ///
-/// Layer linking is generalized over the network layer: placing IPv4/IPv6/ARP stamps the right
-/// EtherType into a preceding Ethernet frame, and placing a transport sets the enclosing IP
-/// layer's next-protocol field (IPv4 `protocol` byte / IPv6 `next header` byte) and picks the
-/// matching pseudo-header for its checksum.
+/// Layer linking is generalized two ways. The **EtherType slot** is the 2-byte field the next
+/// protocol names itself in: Ethernet opens it at its own `+12`, and each 802.1Q VLAN tag both
+/// stamps `0x8100` into the current slot (announcing itself) and moves the slot to its own inner
+/// EtherType at `+2` — so IPv4/IPv6/ARP after any number of VLAN tags stamp the *innermost* slot,
+/// and stacking two tags (QinQ) needs no special case. The **network layer** linking sets the
+/// enclosing IP layer's next-protocol field (IPv4 `protocol` / IPv6 `next header`) and picks the
+/// matching pseudo-header for a transport's checksum.
 pub fn assemble(stack: &[ProtocolSpec]) -> Result<PacketDocument, EngineError> {
     let mut bytes: Vec<u8> = Vec::new();
     let mut layers = Vec::new();
-    let mut eth_offset: Option<usize> = None;
+    // The absolute byte offset of the 2-byte EtherType field the *next* protocol should stamp
+    // itself into (Ethernet's `+12`, or the innermost VLAN tag's `+2`), if a frame opened one.
+    let mut ethertype_slot: Option<usize> = None;
     let mut net: Option<Net> = None;
 
     // Write a next-protocol number into the enclosing IP layer, and return the pseudo-header its
@@ -106,19 +117,31 @@ pub fn assemble(stack: &[ProtocolSpec]) -> Result<PacketDocument, EngineError> {
     for spec in stack {
         let offset = bytes.len();
         let (chunk, layer) = match spec {
-            ProtocolSpec::Ethernet(p) => ethernet::build(offset, p),
+            ProtocolSpec::Ethernet(p) => {
+                let built = ethernet::build(offset, p);
+                ethertype_slot = Some(offset + 12);
+                built
+            }
+            ProtocolSpec::Vlan(p) => {
+                // Announce the tag in the current slot, then hand the slot to this tag's inner
+                // EtherType so the next protocol (or another VLAN, for QinQ) stamps through it.
+                set_ethertype_slot(&mut bytes, ethertype_slot, vlan::TPID_8021Q);
+                let built = vlan::build(offset, p);
+                ethertype_slot = Some(offset + 2);
+                built
+            }
             ProtocolSpec::Ipv4(p) => {
                 net = Some(Net::Ipv4(offset));
-                set_ethertype(&mut bytes, eth_offset, ETHERTYPE_IPV4);
+                set_ethertype_slot(&mut bytes, ethertype_slot, ETHERTYPE_IPV4);
                 ipv4::build(offset, p)
             }
             ProtocolSpec::Ipv6(p) => {
                 net = Some(Net::Ipv6(offset));
-                set_ethertype(&mut bytes, eth_offset, ETHERTYPE_IPV6);
+                set_ethertype_slot(&mut bytes, ethertype_slot, ETHERTYPE_IPV6);
                 ipv6::build(offset, p)
             }
             ProtocolSpec::Arp(p) => {
-                set_ethertype(&mut bytes, eth_offset, ETHERTYPE_ARP);
+                set_ethertype_slot(&mut bytes, ethertype_slot, ETHERTYPE_ARP);
                 arp::build(offset, p)
             }
             ProtocolSpec::Tcp(p) => {
@@ -137,11 +160,20 @@ pub fn assemble(stack: &[ProtocolSpec]) -> Result<PacketDocument, EngineError> {
                 }
                 icmp::build(offset, p)
             }
+            ProtocolSpec::Icmpv6(p) => {
+                // ICMPv6 (next-header 58) rides on IPv6 only, and its checksum needs the IPv6
+                // pseudo-header — so, unlike ICMPv4, it goes through the IPv6-only path here.
+                let pseudo = match net {
+                    Some(Net::Ipv6(ip)) => {
+                        bytes[ip + 6] = icmpv6::PROTO; // IPv6 Next Header
+                        Pseudo::Ipv6 { offset: ip }
+                    }
+                    _ => return Err(EngineError::Assembly("ICMPv6 requires a preceding IPv6 layer")),
+                };
+                icmpv6::build(offset, pseudo, p)
+            }
             ProtocolSpec::Raw(data) => raw::build(offset, data),
         };
-        if matches!(spec, ProtocolSpec::Ethernet(_)) {
-            eth_offset = Some(offset);
-        }
         bytes.extend(chunk);
         layers.push(layer);
     }
@@ -153,9 +185,9 @@ pub fn assemble(stack: &[ProtocolSpec]) -> Result<PacketDocument, EngineError> {
     Ok(doc)
 }
 
-/// Stamp a 2-byte EtherType into the Ethernet layer at `eth_offset`, if there is one.
-fn set_ethertype(bytes: &mut [u8], eth_offset: Option<usize>, ethertype: u16) {
-    if let Some(eth) = eth_offset {
-        bytes[eth + 12..eth + 14].copy_from_slice(&ethertype.to_be_bytes());
+/// Stamp a 2-byte EtherType into the slot a preceding frame/tag opened, if there is one.
+fn set_ethertype_slot(bytes: &mut [u8], slot: Option<usize>, ethertype: u16) {
+    if let Some(at) = slot {
+        bytes[at..at + 2].copy_from_slice(&ethertype.to_be_bytes());
     }
 }

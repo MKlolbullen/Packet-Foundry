@@ -36,8 +36,7 @@ impl Default for Ipv6Params {
 
 /// The IPv6 (40-byte, no-extension-headers) layer/field layout at absolute byte `offset` — shared
 /// by `build` and the dissector. Payload Length is derived (bytes after the fixed header);
-/// addresses are shown as raw 16-byte fields (a dedicated IPv6-address display kind is a
-/// follow-up).
+/// addresses render as 8 colon-separated hex groups (`FieldKind::Ipv6Addr`).
 pub fn layer(offset: usize) -> Layer {
     let bit = offset * 8;
     Layer::new(
@@ -55,8 +54,8 @@ pub fn layer(offset: usize) -> Layer {
             ),
             Field::new("NextHeader", BitRange::bytes(offset + 6, 1), FieldKind::Uint),
             Field::new("HopLimit", BitRange::bytes(offset + 7, 1), FieldKind::Uint),
-            Field::new("SrcAddr", BitRange::bytes(offset + 8, 16), FieldKind::Bytes),
-            Field::new("DstAddr", BitRange::bytes(offset + 24, 16), FieldKind::Bytes),
+            Field::new("SrcAddr", BitRange::bytes(offset + 8, 16), FieldKind::Ipv6Addr),
+            Field::new("DstAddr", BitRange::bytes(offset + 24, 16), FieldKind::Ipv6Addr),
         ],
     )
 }

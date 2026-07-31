@@ -27,6 +27,8 @@ export function structuredPlaceholder(kind: FieldKind): string {
       return "AA:BB:CC:DD:EE:FF";
     case "ipv4_addr":
       return "192.168.1.1";
+    case "ipv6_addr":
+      return "2001:0db8:0000:0000:0000:0000:0000:0001";
     case "bytes":
       return "";
   }
@@ -44,6 +46,8 @@ export function structuredErrorMessage(kind: FieldKind): string {
       return "Not a valid MAC address (e.g. AA:BB:CC:DD:EE:FF).";
     case "ipv4_addr":
       return "Not a valid IPv4 address (four dot-separated 0-255 octets).";
+    case "ipv6_addr":
+      return "Not a valid IPv6 address (eight colon-separated 1–4 digit hex groups; `::` shorthand not supported).";
     case "bytes":
       return "";
   }
@@ -64,6 +68,14 @@ export function structuredDraftFor(document: PacketDocument, field: Field): stri
     case "ipv4_addr": {
       const b = bytes ? readBytesRange(bytes, start_bit, len_bits) : null;
       return b ? Array.from(b).join(".") : "";
+    }
+    case "ipv6_addr": {
+      // Full 8-group form (no `::`), matching formatFieldValue so the draft round-trips.
+      const b = bytes ? readBytesRange(bytes, start_bit, len_bits) : null;
+      if (!b) return "";
+      const groups: string[] = [];
+      for (let i = 0; i < b.length; i += 2) groups.push(((b[i] << 8) | (b[i + 1] ?? 0)).toString(16).padStart(4, "0"));
+      return groups.join(":");
     }
     case "flags": {
       const v = bytes ? readUintBits(bytes, start_bit, len_bits) : null;
@@ -96,6 +108,10 @@ export function parseStructuredValue(kind: FieldKind, text: string, lenBits: num
       return parseColonHex(trimmed, lenBits / 8);
     case "ipv4_addr":
       return parseDottedDecimal(trimmed, lenBits / 8);
+    // Full-form only (exactly 8 colon-separated groups) — no `::` shorthand — so parse is the
+    // exact inverse of formatFieldValue/structuredDraftFor's display, not a superset of it.
+    case "ipv6_addr":
+      return parseIpv6Groups(trimmed);
     case "bytes":
       return null;
   }
@@ -162,6 +178,23 @@ function parseColonHex(text: string, nbytes: number): Uint8Array | null {
   for (let i = 0; i < nbytes; i++) {
     if (!/^[0-9a-fA-F]{1,2}$/.test(parts[i])) return null;
     out[i] = parseInt(parts[i], 16);
+  }
+  return out;
+}
+
+// Full-form IPv6 only: exactly 8 colon-separated groups, each 1–4 hex digits, two bytes per
+// group (16 bytes total). `::` compression is deliberately unsupported — the display side never
+// emits it, so accepting it here would make parse a non-inverse of format. lenBits is implied
+// (always 128 for a real ipv6_addr field); the group count is the real check.
+function parseIpv6Groups(text: string): Uint8Array | null {
+  const parts = text.split(":");
+  if (parts.length !== 8) return null;
+  const out = new Uint8Array(16);
+  for (let i = 0; i < 8; i++) {
+    if (!/^[0-9a-fA-F]{1,4}$/.test(parts[i])) return null;
+    const v = parseInt(parts[i], 16);
+    out[i * 2] = (v >> 8) & 0xff;
+    out[i * 2 + 1] = v & 0xff;
   }
   return out;
 }

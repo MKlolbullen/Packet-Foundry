@@ -43,6 +43,16 @@ export function formatFieldValue(bytes: Uint8Array, field: Field): string {
       const b = readBytesRange(bytes, start_bit, len_bits);
       return b ? Array.from(b).join(".") : "<out-of-bounds>";
     }
+    case "ipv6_addr": {
+      // Full 8-group form (no `::` compression) so display and the structured editor round-trip.
+      const b = readBytesRange(bytes, start_bit, len_bits);
+      if (!b) return "<out-of-bounds>";
+      const groups: string[] = [];
+      for (let i = 0; i < b.length; i += 2) {
+        groups.push(((b[i] << 8) | (b[i + 1] ?? 0)).toString(16).padStart(4, "0"));
+      }
+      return groups.join(":");
+    }
     case "flags": {
       const v = readUintBits(bytes, start_bit, len_bits);
       return v === null ? "<out-of-bounds>" : `0x${v.toString(16).padStart(2, "0")}`;
