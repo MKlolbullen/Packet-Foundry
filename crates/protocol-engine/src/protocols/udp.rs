@@ -4,6 +4,8 @@
 use packet_core::{BitRange, Field, FieldKind, Layer, Operation};
 use serde::{Deserialize, Serialize};
 
+use super::Pseudo;
+
 /// Length of a UDP header in bytes.
 pub const LEN: usize = 8;
 
@@ -19,16 +21,10 @@ pub struct UdpParams {
 ///
 /// Note: RFC 768's special case (a computed checksum of `0x0000` is transmitted as `0xFFFF`) is
 /// not applied here — it is a ~1/65536 case and can be pinned via an override if needed.
-/// The UDP layer/field layout at absolute byte `offset`. `ipv4_offset` locates the enclosing IPv4
-/// layer for the checksum's pseudo-header. Shared by `build` and the dissector.
-pub fn layer(offset: usize, ipv4_offset: usize) -> Layer {
-    let checksum = Operation::internet_checksum(vec![
-        Operation::ReadRange(BitRange::bytes(ipv4_offset + 12, 4)),
-        Operation::ReadRange(BitRange::bytes(ipv4_offset + 16, 4)),
-        Operation::Const(vec![0x00, 17]),
-        Operation::ByteLength { from_byte: offset, width: 2 },
-        Operation::ReadFrom { from_byte: offset },
-    ]);
+/// The UDP layer/field layout at absolute byte `offset`. `pseudo` locates the enclosing IP layer
+/// (v4 or v6) for the checksum's pseudo-header. Shared by `build` and the dissector.
+pub fn layer(offset: usize, pseudo: Pseudo) -> Layer {
+    let checksum = pseudo.checksum(offset, 17);
 
     Layer::new(
         "UDP",
@@ -47,10 +43,10 @@ pub fn layer(offset: usize, ipv4_offset: usize) -> Layer {
     )
 }
 
-pub fn build(offset: usize, ipv4_offset: usize, p: &UdpParams) -> (Vec<u8>, Layer) {
+pub fn build(offset: usize, pseudo: Pseudo, p: &UdpParams) -> (Vec<u8>, Layer) {
     let mut bytes = vec![0u8; LEN];
     bytes[0..2].copy_from_slice(&p.src_port.to_be_bytes());
     bytes[2..4].copy_from_slice(&p.dst_port.to_be_bytes());
     // [4..6] Length — derived; [6..8] Checksum — derived
-    (bytes, layer(offset, ipv4_offset))
+    (bytes, layer(offset, pseudo))
 }

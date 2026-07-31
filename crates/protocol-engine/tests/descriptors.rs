@@ -2,7 +2,7 @@
 //! hand-written Rust builders — proof that "protocols as data" is a faithful mirror, not a fork.
 
 use protocol_engine::descriptor::{LayoutContext, ProtocolDescriptor, lower};
-use protocol_engine::protocols::{ethernet, icmp, ipv4, tcp, udp};
+use protocol_engine::protocols::{Pseudo, ethernet, icmp, ipv4, tcp, udp};
 
 fn load(name: &str) -> ProtocolDescriptor {
     let path = format!("{}/../../protocols/{}", env!("CARGO_MANIFEST_DIR"), name);
@@ -28,12 +28,12 @@ fn shipped_descriptors_lower_identically_to_builders() {
     );
     assert_eq!(
         lower(&load("tcp.json"), &LayoutContext { offset: 34, placed: &placed }).unwrap(),
-        tcp::build(34, 14, &tcp::TcpParams::default()),
+        tcp::build(34, Pseudo::Ipv4 { offset: 14 }, &tcp::TcpParams::default()),
         "tcp.json",
     );
     assert_eq!(
         lower(&load("udp.json"), &LayoutContext { offset: 34, placed: &placed }).unwrap(),
-        udp::build(34, 14, &udp::UdpParams::default()),
+        udp::build(34, Pseudo::Ipv4 { offset: 14 }, &udp::UdpParams::default()),
         "udp.json",
     );
     assert_eq!(

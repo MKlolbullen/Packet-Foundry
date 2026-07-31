@@ -60,6 +60,26 @@ export interface Ipv4Params {
   dst: number[];
 }
 
+export interface Ipv6Params {
+  traffic_class: number;
+  flow_label: number;
+  next_header: number;
+  hop_limit: number;
+  /** 16 bytes. */
+  src: number[];
+  /** 16 bytes. */
+  dst: number[];
+}
+
+export interface ArpParams {
+  /** 1 = request, 2 = reply. */
+  oper: number;
+  sender_mac: number[];
+  sender_ip: number[];
+  target_mac: number[];
+  target_ip: number[];
+}
+
 export interface TcpParams {
   src_port: number;
   dst_port: number;
@@ -86,6 +106,8 @@ export interface IcmpParams {
 export type ProtocolSpec =
   | { Ethernet: EthernetParams }
   | { Ipv4: Ipv4Params }
+  | { Ipv6: Ipv6Params }
+  | { Arp: ArpParams }
   | { Tcp: TcpParams }
   | { Udp: UdpParams }
   | { Icmp: IcmpParams }

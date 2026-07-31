@@ -18,16 +18,20 @@
 
 use packet_core::{Layer, PacketBuffer, PacketDocument};
 
-use crate::protocols::{ethernet, icmp, ipv4, raw, tcp, udp};
+use crate::protocols::{Pseudo, arp, ethernet, icmp, ipv4, ipv6, raw, tcp, udp};
 use crate::resolve::validate;
 
 const ETH_LEN: usize = ethernet::LEN;
 const IPV4_MIN: usize = ipv4::LEN;
+const IPV6_LEN: usize = ipv6::LEN;
+const ARP_LEN: usize = arp::LEN;
 const TCP_MIN: usize = tcp::LEN;
 const UDP_LEN: usize = udp::LEN;
 const ICMP_LEN: usize = icmp::LEN;
 
 const ETHERTYPE_IPV4: u16 = 0x0800;
+const ETHERTYPE_IPV6: u16 = 0x86DD;
+const ETHERTYPE_ARP: u16 = 0x0806;
 const IP_PROTO_ICMP: u8 = 1;
 const IP_PROTO_TCP: u8 = 6;
 const IP_PROTO_UDP: u8 = 17;
@@ -62,6 +66,12 @@ fn dissect_ethernet(bytes: &[u8], layers: &mut Vec<Layer>) {
     let ethertype = u16::from_be_bytes([bytes[12], bytes[13]]);
     match ethertype {
         ETHERTYPE_IPV4 => dissect_ipv4(bytes, ETH_LEN, layers),
+        ETHERTYPE_IPV6 => dissect_ipv6(bytes, ETH_LEN, layers),
+        ETHERTYPE_ARP => {
+            // ARP is a leaf (no encapsulated payload); trailing padding, if any, is Raw.
+            layers.push(arp::layer(ETH_LEN));
+            push_raw(bytes, ETH_LEN + ARP_LEN, "Payload", layers);
+        }
         _ => push_raw(bytes, ETH_LEN, "Unknown", layers),
     }
 }
@@ -84,13 +94,31 @@ fn dissect_ipv4(bytes: &[u8], off: usize, layers: &mut Vec<Layer>) {
         }
     }
     let proto = bytes[off + 9];
-    dissect_transport(bytes, off + hdr, off, proto, layers);
+    dissect_transport(bytes, off + hdr, Pseudo::Ipv4 { offset: off }, proto, layers);
 }
 
-fn dissect_transport(bytes: &[u8], off: usize, ipv4_off: usize, proto: u8, layers: &mut Vec<Layer>) {
+fn dissect_ipv6(bytes: &[u8], off: usize, layers: &mut Vec<Layer>) {
+    // Fixed 40-byte header (no extension headers this pass). Emit it regardless; validate flags a
+    // truncated header, and an extension-header chain would surface as an unexpected Next Header.
+    layers.push(ipv6::layer(off));
+    if bytes.len() < off + IPV6_LEN {
+        return;
+    }
+    let next_header = bytes[off + 6];
+    // TCP/UDP chain with the IPv6 pseudo-header; everything else (including ICMPv6, 58) is opaque
+    // for now — ICMPv6's own pseudo-header checksum is a follow-up.
+    match next_header {
+        IP_PROTO_TCP | IP_PROTO_UDP => {
+            dissect_transport(bytes, off + IPV6_LEN, Pseudo::Ipv6 { offset: off }, next_header, layers)
+        }
+        _ => push_raw(bytes, off + IPV6_LEN, "Payload", layers),
+    }
+}
+
+fn dissect_transport(bytes: &[u8], off: usize, pseudo: Pseudo, proto: u8, layers: &mut Vec<Layer>) {
     match proto {
         IP_PROTO_TCP => {
-            layers.push(tcp::layer(off, ipv4_off));
+            layers.push(tcp::layer(off, pseudo));
             if bytes.len() < off + TCP_MIN {
                 return;
             }
@@ -105,7 +133,7 @@ fn dissect_transport(bytes: &[u8], off: usize, ipv4_off: usize, proto: u8, layer
             push_raw(bytes, off + hdr, "Payload", layers);
         }
         IP_PROTO_UDP => {
-            layers.push(udp::layer(off, ipv4_off));
+            layers.push(udp::layer(off, pseudo));
             if bytes.len() < off + UDP_LEN {
                 return;
             }
@@ -215,10 +243,10 @@ mod tests {
 
     #[test]
     fn unknown_ethertype_yields_ethernet_plus_raw() {
-        // A valid Ethernet header with ethertype 0x86DD (IPv6), then some bytes we don't dissect.
+        // A valid Ethernet header with an ethertype we don't dissect (0x88CC, LLDP).
         let mut bytes = vec![0u8; ETH_LEN];
-        bytes[12] = 0x86;
-        bytes[13] = 0xDD;
+        bytes[12] = 0x88;
+        bytes[13] = 0xCC;
         bytes.extend_from_slice(&[0xAA; 8]);
         let doc = dissect(&bytes);
         let names: Vec<&str> = doc.layers.iter().map(|l| l.name.as_str()).collect();
@@ -257,5 +285,65 @@ mod tests {
         let out = dissect(doc.buffer.as_slice());
         let names: Vec<&str> = out.layers.iter().map(|l| l.name.as_str()).collect();
         assert_eq!(names, vec!["Ethernet II", "IPv4", "UDP"]);
+    }
+
+    #[test]
+    fn round_trips_an_assembled_arp_request() {
+        use crate::protocols::arp;
+        let assembled = assemble(&[
+            ProtocolSpec::Ethernet(ethernet::EthernetParams::default()),
+            ProtocolSpec::Arp(arp::ArpParams {
+                sender_ip: [192, 168, 1, 1],
+                target_ip: [192, 168, 1, 2],
+                ..Default::default()
+            }),
+        ])
+        .unwrap();
+        // The assembler stamped the ARP ethertype into the Ethernet frame.
+        let ethertype = assembled.layers[0].field("EtherType").unwrap().range;
+        assert_eq!(assembled.buffer.read_uint(ethertype).unwrap(), 0x0806);
+
+        let dissected = dissect(assembled.buffer.as_slice());
+        let names: Vec<&str> = dissected.layers.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, vec!["Ethernet II", "ARP"]);
+        assert!(dissected.diagnostics.is_empty(), "unexpected diagnostics: {:?}", dissected.diagnostics);
+        let oper = dissected.layers[1].field("Operation").unwrap().range;
+        assert_eq!(dissected.buffer.read_uint(oper).unwrap(), 1);
+    }
+
+    #[test]
+    fn round_trips_ipv6_tcp_with_v6_pseudo_header_checksum() {
+        use crate::protocols::{ipv6, tcp};
+        let assembled = assemble(&[
+            ProtocolSpec::Ethernet(ethernet::EthernetParams::default()),
+            ProtocolSpec::Ipv6(ipv6::Ipv6Params {
+                src: [0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                dst: [0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+                ..Default::default()
+            }),
+            ProtocolSpec::Tcp(tcp::TcpParams { dst_port: 443, flags: flags::SYN, ..Default::default() }),
+        ])
+        .unwrap();
+        // The assembler stamped the IPv6 ethertype and set IPv6 Next Header = TCP (6).
+        let ethertype = assembled.layers[0].field("EtherType").unwrap().range;
+        assert_eq!(assembled.buffer.read_uint(ethertype).unwrap(), 0x86DD);
+        // A clean assemble validates cleanly — including the IPv6 pseudo-header TCP checksum.
+        assert!(assembled.diagnostics.is_empty(), "assemble diagnostics: {:?}", assembled.diagnostics);
+
+        let dissected = dissect(assembled.buffer.as_slice());
+        assert_eq!(dissected.layers.len(), assembled.layers.len());
+        for (d, a) in dissected.layers.iter().zip(&assembled.layers) {
+            assert_eq!(d.name, a.name);
+            assert_eq!(d.range, a.range);
+            for (df, af) in d.fields.iter().zip(&a.fields) {
+                assert_eq!(df.name, af.name);
+                assert_eq!(df.range, af.range);
+            }
+        }
+        let names: Vec<&str> = dissected.layers.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, vec!["Ethernet II", "IPv6", "TCP"]);
+        // Dissection reuses the same IPv6 pseudo-header derivation, so the captured checksum still
+        // validates — no mismatch.
+        assert!(dissected.diagnostics.is_empty(), "dissect diagnostics: {:?}", dissected.diagnostics);
     }
 }
