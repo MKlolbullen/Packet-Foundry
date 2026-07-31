@@ -3,6 +3,8 @@ import BoxEditor from "./BoxEditor";
 import Assistant from "./Assistant";
 import SettingsModal from "./SettingsModal";
 import Workspace from "./workspace/Workspace";
+import AppShell from "./shell/AppShell";
+import type { WorkspaceView } from "./shell/WorkspaceNavigation";
 import { type ThemeSetting, applyTheme, loadThemeSetting, saveThemeSetting } from "./theme";
 import "./App.css";
 
@@ -41,60 +43,40 @@ function ThemeToggle() {
   );
 }
 
-type Tab = "assemble" | "boxes" | "assistant";
+const VIEW_META: Record<WorkspaceView, { title: string; subtitle: string }> = {
+  workbench: { title: "Packet Workbench", subtitle: "Compose · inspect · edit · derive" },
+  operations: { title: "Operation Editor", subtitle: "Build and evaluate derivation trees" },
+  assistant: { title: "Assistant", subtitle: "Ask about packets and protocols" },
+};
 
 function App() {
-  const [tab, setTab] = useState<Tab>("assemble");
+  const [view, setView] = useState<WorkspaceView>("workbench");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const meta = VIEW_META[view];
 
   return (
-    <main className="container">
-      <header>
-        <div className="header-bar">
-          <div className="header-spacer">
-            <button
-              className="settings-button"
-              onClick={() => setSettingsOpen(true)}
-              title="LLM settings"
-              aria-label="LLM settings"
-            >
-              ⚙
-            </button>
-          </div>
-          <div className="header-titles">
-            <h1>Packet Foundry</h1>
-            <p className="tagline">A bidirectional, non-lossy assembler for wire formats.</p>
-          </div>
-          <ThemeToggle />
-        </div>
-      </header>
-
-      <nav className="tabs">
-        <button className={tab === "assemble" ? "tab active" : "tab"} onClick={() => setTab("assemble")}>
-          Build &amp; Inspect
-        </button>
-        <button className={tab === "boxes" ? "tab active" : "tab"} onClick={() => setTab("boxes")}>
-          Box Editor
-        </button>
-        <button className={tab === "assistant" ? "tab active" : "tab"} onClick={() => setTab("assistant")}>
-          Assistant
-        </button>
-      </nav>
-
-      {/* All tabs stay mounted so switching back and forth never loses a draft (the assembled
-          stack, an in-progress box tree, pan/zoom position, a chat transcript, ...). */}
-      <div style={{ display: tab === "assemble" ? "block" : "none" }}>
-        <Workspace active={tab === "assemble"} />
+    <AppShell
+      view={view}
+      onSelectView={setView}
+      onSettings={() => setSettingsOpen(true)}
+      title={meta.title}
+      subtitle={meta.subtitle}
+      actions={<ThemeToggle />}
+    >
+      {/* All workspaces stay mounted so switching never loses a draft (the assembled stack, an
+          in-progress box tree, pan/zoom position, a chat transcript, ...). */}
+      <div style={{ display: view === "workbench" ? "block" : "none" }}>
+        <Workspace active={view === "workbench"} />
       </div>
-      <div style={{ display: tab === "boxes" ? "block" : "none" }}>
-        <BoxEditor active={tab === "boxes"} />
+      <div style={{ display: view === "operations" ? "block" : "none" }}>
+        <BoxEditor active={view === "operations"} />
       </div>
-      <div style={{ display: tab === "assistant" ? "block" : "none" }}>
+      <div style={{ display: view === "assistant" ? "block" : "none" }}>
         <Assistant />
       </div>
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
-    </main>
+    </AppShell>
   );
 }
 
