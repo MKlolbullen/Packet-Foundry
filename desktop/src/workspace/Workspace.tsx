@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PacketDiff, PacketDocument, ProtocolSpec } from "../types";
 import ProtocolPalette from "../composer/ProtocolPalette";
@@ -8,11 +8,31 @@ import { useComposer } from "../composer/useComposer";
 import Breadcrumbs from "./Breadcrumbs";
 import SemanticStage from "./SemanticStage";
 import ChangesPanel from "./ChangesPanel";
+import VariantsBar from "./VariantsBar";
 import DiagnosticsPanel from "./DiagnosticsPanel";
 import HexBitRail from "./HexBitRail";
 import { WorkspaceProvider, useWorkspace } from "./WorkspaceContext";
 import { INITIAL_DOCUMENT_HISTORY, documentHistoryReducer } from "./documentHistory";
+import { diffSummary, type DiffSummary } from "./diffView";
+import {
+  INITIAL_VARIANT_STATE,
+  variantById,
+  variantsReducer,
+  type VariantState,
+} from "./variants";
 import "./workspace.css";
+
+/** Variant store + actions, grouped for the chip bar. */
+interface VariantsApi {
+  state: VariantState;
+  summaries: Record<string, DiffSummary>;
+  hasWorkingDoc: boolean;
+  onSelect: (id: string) => void;
+  onSave: () => void;
+  onRename: (id: string, label: string) => void;
+  onDelete: (id: string) => void;
+  onSetBase: (id: string) => void;
+}
 
 type InputMode = "compose" | "spec" | "dissect" | "load";
 
@@ -38,6 +58,7 @@ function WorkbenchStage({
   composer,
   mode,
   diff,
+  variants,
 }: {
   doc: PacketDocument | null;
   active: boolean;
@@ -45,6 +66,7 @@ function WorkbenchStage({
   composer: ComposerApi;
   mode: InputMode;
   diff: PacketDiff | null;
+  variants: VariantsApi;
 }) {
   const { camera, dive, jump, rise, back, forward, selectRange } = useWorkspace();
 
@@ -81,6 +103,16 @@ function WorkbenchStage({
   return (
     <>
       <div className="workbench-center">
+        <VariantsBar
+          state={variants.state}
+          summaries={variants.summaries}
+          hasWorkingDoc={variants.hasWorkingDoc}
+          onSelect={variants.onSelect}
+          onSave={variants.onSave}
+          onRename={variants.onRename}
+          onDelete={variants.onDelete}
+          onSetBase={variants.onSetBase}
+        />
         <div className="row workbench-history-row">
           {doc ? <Breadcrumbs document={doc} camera={camera} onJump={jump} /> : <span className="breadcrumbs" />}
           <div className="doc-history-controls">
@@ -147,6 +179,9 @@ export default function Workspace({ active }: { active: boolean }) {
   const [loadText, setLoadText] = useState("");
   const [showJson, setShowJson] = useState(false);
   const [diff, setDiff] = useState<PacketDiff | null>(null);
+  const [variants, dispatchVariants] = useReducer(variantsReducer, INITIAL_VARIANT_STATE);
+  const [summaries, setSummaries] = useState<Record<string, DiffSummary>>({});
+  const variantIdCounter = useRef(0);
 
   const edit = useMemo<DocumentEditApi>(
     () => ({
@@ -195,6 +230,58 @@ export default function Workspace({ active }: { active: boolean }) {
       ignore = true;
     };
   }, [docState.current, docState.undoStack]);
+
+  // Per-variant diff against the base — the `·N` change count on each chip. One invoke per non-base
+  // variant; fine for a handful (a future batch command could scale it). Stale-guarded, and keyed on
+  // items/baseId so merely switching the active variant doesn't recompute every diff.
+  useEffect(() => {
+    const base = variantById(variants, variants.baseId);
+    if (!base) {
+      setSummaries({});
+      return;
+    }
+    let ignore = false;
+    (async () => {
+      const next: Record<string, DiffSummary> = {};
+      for (const v of variants.items) {
+        if (v.id === base.id) continue;
+        try {
+          const d = await invoke<PacketDiff>("diff_packets", { base: base.doc, variant: v.doc });
+          next[v.id] = diffSummary(d);
+        } catch {
+          // Leave this variant without a count rather than failing the whole map.
+        }
+      }
+      if (!ignore) setSummaries(next);
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [variants.items, variants.baseId]);
+
+  const variantsApi = useMemo<VariantsApi>(
+    () => ({
+      state: variants,
+      summaries,
+      hasWorkingDoc: doc !== null,
+      onSelect: (id) => {
+        const v = variantById(variants, id);
+        if (!v) return;
+        dispatchVariants({ type: "SELECT", id });
+        dispatchDoc({ type: "SET", document: v.doc });
+      },
+      onSave: () => {
+        if (!doc) return;
+        variantIdCounter.current += 1;
+        const n = variantIdCounter.current;
+        dispatchVariants({ type: "SAVE", id: `v${n}`, label: `Variant ${n}`, doc });
+      },
+      onRename: (id, label) => dispatchVariants({ type: "RENAME", id, label }),
+      onDelete: (id) => dispatchVariants({ type: "DELETE", id }),
+      onSetBase: (id) => dispatchVariants({ type: "SET_BASE", id }),
+    }),
+    [variants, summaries, doc],
+  );
 
   async function onAssembleSpec() {
     try {
@@ -338,7 +425,7 @@ export default function Workspace({ active }: { active: boolean }) {
           {error && <p className="error">{error}</p>}
         </aside>
 
-        <WorkbenchStage doc={doc} active={active} edit={edit} composer={composer} mode={inputMode} diff={diff} />
+        <WorkbenchStage doc={doc} active={active} edit={edit} composer={composer} mode={inputMode} diff={diff} variants={variantsApi} />
       </div>
     </WorkspaceProvider>
   );

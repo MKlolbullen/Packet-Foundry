@@ -4,6 +4,34 @@
 
 import type { BitRange, FieldChange, FieldState, PacketDiff, PacketDocument } from "../types";
 
+/** A compact tally of a diff for a variant chip's `·N` badge. `consequence` also folds in
+ * `state_only` changes (both are non-direct); `total` is the sum shown on the chip. */
+export interface DiffSummary {
+  direct: number;
+  consequence: number;
+  added: number;
+  removed: number;
+  total: number;
+}
+
+export function diffSummary(diff: PacketDiff): DiffSummary {
+  let direct = 0;
+  let consequence = 0;
+  let added = 0;
+  let removed = 0;
+  for (const layer of diff.layers) {
+    if (layer.status === "added") added += 1;
+    if (layer.status === "removed") removed += 1;
+    added += layer.fields_added.length;
+    removed += layer.fields_removed.length;
+    for (const f of layer.fields_changed) {
+      if (f.change === "direct_edit") direct += 1;
+      else if (f.change === "derived_consequence" || f.change === "state_only") consequence += 1;
+    }
+  }
+  return { direct, consequence, added, removed, total: direct + consequence + added + removed };
+}
+
 /** A short badge label for a field change — the causal classification made human. */
 export function changeBadgeLabel(change: FieldChange): string {
   switch (change) {
