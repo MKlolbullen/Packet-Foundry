@@ -397,6 +397,33 @@
   border-color: var(--accent-2);
 }
 
+/* In-place derivation (UI redesign phase 5): the read-only op tree expanded inside FieldDetail,
+   so a derived field's computation is visible without leaving the packet. */
+.field-derivation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.field-derivation-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.field-derivation-inline .viewport {
+  min-height: 220px;
+  border-color: var(--accent-2);
+}
+
+.derivation-fullview {
+  align-self: flex-end;
+  font-size: 0.85em;
+  color: var(--accent-2-soft-text);
+  background: transparent;
+  border-color: var(--accent-2);
+}
+
 /* ---- fallback ---- */
 
 .projection-fallback {
