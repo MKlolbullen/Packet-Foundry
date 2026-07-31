@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PacketDiff, PacketDocument, ProtocolSpec } from "../types";
+import { bytesToHex } from "../hex";
+import { LINKTYPE_ETHERNET, frameTimestamp, parsePcap, type PcapFrame } from "../pcap";
+import { summarizeFrame } from "../framePeek";
 import ProtocolPalette from "../composer/ProtocolPalette";
 import StackView from "../composer/StackView";
 import LayerInspector from "../composer/LayerInspector";
@@ -34,7 +37,16 @@ interface VariantsApi {
   onSetBase: (id: string) => void;
 }
 
-type InputMode = "compose" | "spec" | "dissect" | "load";
+type InputMode = "compose" | "spec" | "dissect" | "load" | "pcap";
+
+/** Metadata about an opened capture, shown above the frame list. */
+interface PcapMeta {
+  linkType: number;
+  nanos: boolean;
+  truncated: boolean;
+  capped: boolean;
+  fileName: string;
+}
 
 /** Document-mutation state and actions, grouped into one object — they all touch the same
  * undo/redo stack, mirroring how camera navigation callbacks come bundled through useWorkspace(). */
@@ -177,6 +189,10 @@ export default function Workspace({ active }: { active: boolean }) {
   const [stackText, setStackText] = useState("");
   const [hexText, setHexText] = useState("");
   const [loadText, setLoadText] = useState("");
+  const [pcapFrames, setPcapFrames] = useState<PcapFrame[] | null>(null);
+  const [pcapMeta, setPcapMeta] = useState<PcapMeta | null>(null);
+  const [pcapFrameIndex, setPcapFrameIndex] = useState<number | null>(null);
+  const [pcapFilter, setPcapFilter] = useState("");
   const [showJson, setShowJson] = useState(false);
   const [diff, setDiff] = useState<PacketDiff | null>(null);
   const [variants, dispatchVariants] = useReducer(variantsReducer, INITIAL_VARIANT_STATE);
@@ -193,6 +209,20 @@ export default function Workspace({ active }: { active: boolean }) {
     }),
     [docState],
   );
+
+  // Shallow protocol peek per frame for the list labels; recomputed only when a new file is opened.
+  const pcapRows = useMemo(
+    () => (pcapFrames ?? []).map((frame) => ({ frame, summary: summarizeFrame(frame.data) })),
+    [pcapFrames],
+  );
+  const visiblePcapRows = useMemo(() => {
+    const q = pcapFilter.trim().toLowerCase();
+    if (!q) return pcapRows;
+    return pcapRows.filter(
+      ({ frame, summary }) =>
+        `#${frame.index} ${summary.label} ${summary.info}`.toLowerCase().includes(q),
+    );
+  }, [pcapRows, pcapFilter]);
 
   const composer = useComposer(
     (d) => dispatchDoc({ type: "SET", document: d }),
@@ -314,11 +344,47 @@ export default function Workspace({ active }: { active: boolean }) {
     }
   }
 
+  async function onPickPcap(file: File | undefined) {
+    if (!file) return;
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const cap = parsePcap(bytes);
+      setPcapFrames(cap.frames);
+      setPcapMeta({
+        linkType: cap.linkType,
+        nanos: cap.nanos,
+        truncated: cap.truncated,
+        capped: cap.capped,
+        fileName: file.name,
+      });
+      setPcapFrameIndex(null);
+      setError(cap.frames.length === 0 ? "No frames in this capture." : null);
+    } catch (e) {
+      setPcapFrames(null);
+      setPcapMeta(null);
+      setError(String(e));
+    }
+  }
+
+  // Dissecting a picked frame reuses the same `dissect_hex` command as paste-hex — the frame's
+  // captured link-layer bytes are exactly what `dissect()` expects.
+  async function onPickFrame(frame: PcapFrame) {
+    try {
+      const dissected = await invoke<PacketDocument>("dissect_hex", { hex: bytesToHex(frame.data) });
+      dispatchDoc({ type: "SET", document: dissected });
+      setPcapFrameIndex(frame.index);
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   const MODES: { id: InputMode; label: string }[] = [
     { id: "compose", label: "Compose" },
     { id: "spec", label: "Spec JSON" },
     { id: "dissect", label: "Dissect bytes" },
     { id: "load", label: "Load JSON" },
+    { id: "pcap", label: "Open .pcap" },
   ];
 
   return (
@@ -419,6 +485,70 @@ export default function Workspace({ active }: { active: boolean }) {
                   Load
                 </button>
               </div>
+            </div>
+          )}
+
+          {inputMode === "pcap" && (
+            <div className="workbench-input">
+              <p className="hint">
+                Open a classic <code>.pcap</code> capture and pick a frame to dissect. Each frame is
+                read as an Ethernet II packet.
+              </p>
+              <input
+                type="file"
+                className="pcap-file"
+                accept=".pcap,.cap,application/vnd.tcpdump.pcap,application/octet-stream"
+                onChange={(e) => onPickPcap(e.currentTarget.files?.[0])}
+              />
+              {pcapMeta && pcapFrames && (
+                <div className="pcap-result">
+                  <div className="pcap-meta">
+                    <span className="pcap-file-name">{pcapMeta.fileName}</span>
+                    <span className="pcap-frame-count">
+                      {pcapFrames.length} frame{pcapFrames.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  {pcapMeta.linkType !== LINKTYPE_ETHERNET && (
+                    <p className="hint pcap-warn">
+                      Link type {pcapMeta.linkType} isn't Ethernet — dissection still assumes an
+                      Ethernet II frame, so results may be off.
+                    </p>
+                  )}
+                  {pcapMeta.truncated && <p className="hint pcap-warn">Capture was truncated; showing the frames read.</p>}
+                  {pcapMeta.capped && <p className="hint pcap-warn">Large capture — showing the first {pcapFrames.length} frames.</p>}
+                  {pcapFrames.length > 1 && (
+                    <input
+                      className="pcap-filter"
+                      type="text"
+                      value={pcapFilter}
+                      onChange={(e) => setPcapFilter(e.currentTarget.value)}
+                      placeholder="Filter (e.g. TCP, DNS, 192.168…)"
+                      spellCheck={false}
+                    />
+                  )}
+                  <ul className="pcap-frames">
+                    {visiblePcapRows.map(({ frame: f, summary }) => {
+                      const t0 = pcapFrames[0];
+                      const delta = frameTimestamp(f, pcapMeta.nanos) - frameTimestamp(t0, pcapMeta.nanos);
+                      return (
+                        <li key={f.index}>
+                          <button
+                            className={pcapFrameIndex === f.index ? "pcap-frame active" : "pcap-frame"}
+                            onClick={() => onPickFrame(f)}
+                            title={`#${f.index} · +${delta.toFixed(6)}s · ${summary.info || summary.label}`}
+                          >
+                            <span className="pcap-frame-idx">#{f.index}</span>
+                            <span className="pcap-frame-proto">{summary.label}</span>
+                            <span className="pcap-frame-info">{summary.info}</span>
+                            <span className="pcap-frame-len">{f.origLen} B</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                    {visiblePcapRows.length === 0 && <li className="hint pcap-empty">No frames match “{pcapFilter}”.</li>}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
