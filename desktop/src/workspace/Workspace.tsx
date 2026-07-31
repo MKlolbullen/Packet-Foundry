@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useReducer, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { PacketDocument, ProtocolSpec } from "../types";
+import type { PacketDiff, PacketDocument, ProtocolSpec } from "../types";
 import ProtocolPalette from "../composer/ProtocolPalette";
 import StackView from "../composer/StackView";
 import LayerInspector from "../composer/LayerInspector";
 import { useComposer } from "../composer/useComposer";
 import Breadcrumbs from "./Breadcrumbs";
 import SemanticStage from "./SemanticStage";
+import ChangesPanel from "./ChangesPanel";
 import DiagnosticsPanel from "./DiagnosticsPanel";
 import HexBitRail from "./HexBitRail";
 import { WorkspaceProvider, useWorkspace } from "./WorkspaceContext";
@@ -36,12 +37,14 @@ function WorkbenchStage({
   edit,
   composer,
   mode,
+  diff,
 }: {
   doc: PacketDocument | null;
   active: boolean;
   edit: DocumentEditApi;
   composer: ComposerApi;
   mode: InputMode;
+  diff: PacketDiff | null;
 }) {
   const { camera, dive, jump, rise, back, forward, selectRange } = useWorkspace();
 
@@ -114,6 +117,7 @@ function WorkbenchStage({
             onMode={composer.setMode}
           />
         )}
+        {doc && diff && <ChangesPanel diff={diff} current={doc} onSelectRange={selectRange} />}
         <div className="workbench-diagnostics">
           <DiagnosticsPanel diagnostics={doc?.diagnostics ?? []} selectedRange={camera.selectedRange} />
         </div>
@@ -142,6 +146,7 @@ export default function Workspace({ active }: { active: boolean }) {
   const [hexText, setHexText] = useState("");
   const [loadText, setLoadText] = useState("");
   const [showJson, setShowJson] = useState(false);
+  const [diff, setDiff] = useState<PacketDiff | null>(null);
 
   const edit = useMemo<DocumentEditApi>(
     () => ({
@@ -167,6 +172,29 @@ export default function Workspace({ active }: { active: boolean }) {
       setStackText(JSON.stringify(stack, null, 2));
     })();
   }, []);
+
+  // The "Changes" diff: current document against its previous undo snapshot ("what did my last
+  // edit change, and what cascaded?"). Empty undo stack (a fresh assemble/dissect/load resets it)
+  // → no diff. The ignore flag drops a stale async result if a fast edit sequence outruns it.
+  useEffect(() => {
+    const base = docState.undoStack[docState.undoStack.length - 1];
+    if (!base || !docState.current) {
+      setDiff(null);
+      return;
+    }
+    let ignore = false;
+    (async () => {
+      try {
+        const d = await invoke<PacketDiff>("diff_packets", { base, variant: docState.current });
+        if (!ignore) setDiff(d);
+      } catch {
+        if (!ignore) setDiff(null);
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [docState.current, docState.undoStack]);
 
   async function onAssembleSpec() {
     try {
@@ -310,7 +338,7 @@ export default function Workspace({ active }: { active: boolean }) {
           {error && <p className="error">{error}</p>}
         </aside>
 
-        <WorkbenchStage doc={doc} active={active} edit={edit} composer={composer} mode={inputMode} />
+        <WorkbenchStage doc={doc} active={active} edit={edit} composer={composer} mode={inputMode} diff={diff} />
       </div>
     </WorkspaceProvider>
   );

@@ -40,6 +40,62 @@ export interface FieldPin {
   bytes: number[];
 }
 
+// --- Semantic diff — mirrors protocol_engine::diff ---
+
+export type FieldState = "plain" | "derived" | "pinned";
+export type FieldChange = "unchanged" | "direct_edit" | "derived_consequence" | "state_only";
+export type LayerStatus = "unchanged" | "modified" | "added" | "removed";
+
+export interface FieldSnapshot {
+  name: string;
+  kind: FieldKind;
+  range: BitRange;
+  state: FieldState;
+  value: string;
+}
+
+export interface FieldDiff {
+  name: string;
+  kind: FieldKind;
+  range_before: BitRange;
+  range_after: BitRange;
+  state_before: FieldState;
+  state_after: FieldState;
+  value_before: string;
+  value_after: string;
+  change: FieldChange;
+}
+
+export interface LayerDiff {
+  name: string;
+  status: LayerStatus;
+  fields_added: FieldSnapshot[];
+  fields_removed: FieldSnapshot[];
+  fields_changed: FieldDiff[];
+}
+
+export interface ByteRange {
+  start: number;
+  end: number;
+}
+
+export interface ByteDiff {
+  changed: ByteRange[];
+  len_before: number;
+  len_after: number;
+}
+
+export interface DiagnosticsDiff {
+  added: Diagnostic[];
+  removed: Diagnostic[];
+}
+
+export interface PacketDiff {
+  layers: LayerDiff[];
+  bytes: ByteDiff;
+  diagnostics: DiagnosticsDiff;
+}
+
 export type FieldKind = "uint" | "bytes" | "mac_addr" | "ipv4_addr" | "ipv6_addr" | "flags";
 
 export interface Field {
