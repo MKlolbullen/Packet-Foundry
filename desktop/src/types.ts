@@ -7,6 +7,39 @@ export interface BitRange {
   len_bits: number;
 }
 
+// --- Protocol catalogue (composer) — mirrors protocol_engine::catalog ---
+
+export type ProtocolCategory = "link" | "network" | "transport" | "application" | "payload";
+
+/** How a field participates in the composer form — mirrors `ParameterRole`. */
+export type ParameterRole = "editable" | "derived" | "auto_linked" | "fixed";
+
+export interface ParameterDescriptor {
+  name: string;
+  kind: FieldKind;
+  offset_bits: number;
+  width_bits: number;
+  /** Default bytes, in the same encoding a `FieldPin` uses. */
+  default: number[];
+  role: ParameterRole;
+}
+
+export interface ProtocolCatalogEntry {
+  id: string;
+  display_name: string;
+  category: ProtocolCategory;
+  allowed_parents: string[];
+  allowed_children: string[];
+  fields: ParameterDescriptor[];
+}
+
+/** A pinned field value — mirrors `protocol_engine::FieldPin`. */
+export interface FieldPin {
+  layer_index: number;
+  field_name: string;
+  bytes: number[];
+}
+
 export type FieldKind = "uint" | "bytes" | "mac_addr" | "ipv4_addr" | "ipv6_addr" | "flags";
 
 export interface Field {

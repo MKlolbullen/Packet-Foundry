@@ -4,7 +4,7 @@
 //! are placed at absolute offsets. Then [`resolve`] runs the resolve pass, filling derived fields
 //! (lengths, checksums) in dependency order.
 
-use packet_core::{PacketBuffer, PacketDocument};
+use packet_core::{Layer, PacketBuffer, PacketDocument};
 use serde::{Deserialize, Serialize};
 
 use crate::eval::EngineError;
@@ -76,6 +76,18 @@ impl ProtocolSpec {
     }
 }
 
+/// A pinned field value the composer supplies alongside a stack: it overrides the field's bytes
+/// (via the same `override_bytes` mechanism `set_field_bytes` uses), so a user-entered or
+/// deliberately-invalid value wins over the assembler's auto-linking, while derived fields still
+/// recompute over it. `layer_index` is the 0-based position in the stack; `field_name` is the
+/// layer field name (e.g. `"EtherType"`, `"SrcPort"`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FieldPin {
+    pub layer_index: usize,
+    pub field_name: String,
+    pub bytes: Vec<u8>,
+}
+
 /// Assemble an ordered protocol stack into a resolved document (layout pass + resolve pass).
 ///
 /// Layer linking is generalized two ways. The **EtherType slot** is the 2-byte field the next
@@ -86,6 +98,44 @@ impl ProtocolSpec {
 /// enclosing IP layer's next-protocol field (IPv4 `protocol` / IPv6 `next header`) and picks the
 /// matching pseudo-header for a transport's checksum.
 pub fn assemble(stack: &[ProtocolSpec]) -> Result<PacketDocument, EngineError> {
+    assemble_with_pins(stack, &[])
+}
+
+/// Assemble a stack, then apply `pins` as field overrides before the resolve pass. With no pins
+/// this is byte-identical to [`assemble`]. Each pin is validated against its field's range
+/// ([`packet_core::BitRange::check_field_bytes`]) so a malformed pin is a clear error, not a
+/// silent no-op; a pin on an auto-linked field (EtherType / IP protocol) therefore wins over the
+/// linker's stamp, and derived fields (checksums, lengths) recompute over the pinned bytes.
+pub fn assemble_with_pins(
+    stack: &[ProtocolSpec],
+    pins: &[FieldPin],
+) -> Result<PacketDocument, EngineError> {
+    let (bytes, layers) = layout(stack)?;
+    let mut doc = PacketDocument::with_buffer(PacketBuffer::from_bytes(bytes));
+    doc.layers = layers;
+    doc.assign_missing_node_ids();
+
+    let buf_len = doc.buffer.len();
+    for pin in pins {
+        let layer = doc
+            .layers
+            .get_mut(pin.layer_index)
+            .ok_or(EngineError::Assembly("pin layer index out of range"))?;
+        let field = layer
+            .field_mut(&pin.field_name)
+            .ok_or(EngineError::Assembly("unknown pinned field"))?;
+        field.range.check_field_bytes(&pin.bytes, buf_len)?;
+        field.override_bytes = Some(pin.bytes.clone());
+    }
+
+    resolve(&mut doc)?;
+    Ok(doc)
+}
+
+/// The layout pass: append each layer's bytes and record its `Layer`, generalizing next-protocol
+/// linking (see [`assemble`]). Returns the raw buffer bytes and the layer list, before ids are
+/// assigned or the resolve pass runs.
+fn layout(stack: &[ProtocolSpec]) -> Result<(Vec<u8>, Vec<Layer>), EngineError> {
     let mut bytes: Vec<u8> = Vec::new();
     let mut layers = Vec::new();
     // The absolute byte offset of the 2-byte EtherType field the *next* protocol should stamp
@@ -178,16 +228,99 @@ pub fn assemble(stack: &[ProtocolSpec]) -> Result<PacketDocument, EngineError> {
         layers.push(layer);
     }
 
-    let mut doc = PacketDocument::with_buffer(PacketBuffer::from_bytes(bytes));
-    doc.layers = layers;
-    doc.assign_missing_node_ids();
-    resolve(&mut doc)?;
-    Ok(doc)
+    Ok((bytes, layers))
 }
 
 /// Stamp a 2-byte EtherType into the slot a preceding frame/tag opened, if there is one.
 fn set_ethertype_slot(bytes: &mut [u8], slot: Option<usize>, ethertype: u16) {
     if let Some(at) = slot {
         bytes[at..at + 2].copy_from_slice(&ethertype.to_be_bytes());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocols::{ethernet, ipv4, tcp};
+
+    fn eth_ipv4_tcp() -> Vec<ProtocolSpec> {
+        vec![
+            ProtocolSpec::Ethernet(ethernet::EthernetParams::default()),
+            ProtocolSpec::Ipv4(ipv4::Ipv4Params { src: [1, 2, 3, 4], dst: [5, 6, 7, 8], ..Default::default() }),
+            ProtocolSpec::Tcp(tcp::TcpParams { dst_port: 443, flags: tcp::flags::SYN, ..Default::default() }),
+        ]
+    }
+
+    #[test]
+    fn assemble_with_pins_empty_is_identical() {
+        let stack = eth_ipv4_tcp();
+        let plain = assemble(&stack).unwrap();
+        let no_pins = assemble_with_pins(&stack, &[]).unwrap();
+        assert_eq!(plain.buffer, no_pins.buffer);
+        assert_eq!(plain.layers, no_pins.layers);
+    }
+
+    #[test]
+    fn pinned_ethertype_overrides_autolink() {
+        // Auto-linking would stamp 0x0800 into the Ethernet EtherType; a pin must win.
+        let doc = assemble_with_pins(
+            &eth_ipv4_tcp(),
+            &[FieldPin { layer_index: 0, field_name: "EtherType".into(), bytes: vec![0xBE, 0xEF] }],
+        )
+        .unwrap();
+        assert_eq!(&doc.buffer.as_slice()[12..14], &[0xBE, 0xEF]);
+    }
+
+    #[test]
+    fn invalid_protocol_pin_stands_and_checksums_still_resolve() {
+        // Pin IPv4 Protocol to 0 under a TCP child (auto would write 6). The deliberately-wrong
+        // value stands, and the IPv4/TCP checksums still resolve over it with no panic.
+        let doc = assemble_with_pins(
+            &eth_ipv4_tcp(),
+            &[FieldPin { layer_index: 1, field_name: "Protocol".into(), bytes: vec![0x00] }],
+        )
+        .unwrap();
+        let proto = doc.layers[1].field("Protocol").unwrap().range;
+        assert_eq!(doc.buffer.read_uint(proto).unwrap(), 0);
+        // HeaderChecksum is derived and non-zero (it recomputed over the pinned protocol byte).
+        let csum = doc.layers[1].field("HeaderChecksum").unwrap().range;
+        assert_ne!(doc.buffer.read_uint(csum).unwrap(), 0);
+    }
+
+    #[test]
+    fn pinning_an_editable_field_matches_the_param() {
+        // Pinning TCP.SrcPort to 443 yields the same buffer as assembling it via the param.
+        let pinned = assemble_with_pins(
+            &eth_ipv4_tcp(),
+            &[FieldPin { layer_index: 2, field_name: "SrcPort".into(), bytes: vec![0x01, 0xBB] }],
+        )
+        .unwrap();
+        let via_param = assemble(&[
+            ProtocolSpec::Ethernet(ethernet::EthernetParams::default()),
+            ProtocolSpec::Ipv4(ipv4::Ipv4Params { src: [1, 2, 3, 4], dst: [5, 6, 7, 8], ..Default::default() }),
+            ProtocolSpec::Tcp(tcp::TcpParams { src_port: 443, dst_port: 443, flags: tcp::flags::SYN, ..Default::default() }),
+        ])
+        .unwrap();
+        assert_eq!(pinned.buffer, via_param.buffer);
+    }
+
+    #[test]
+    fn unknown_pin_field_is_an_error() {
+        let err = assemble_with_pins(
+            &eth_ipv4_tcp(),
+            &[FieldPin { layer_index: 0, field_name: "Nope".into(), bytes: vec![0x00] }],
+        )
+        .unwrap_err();
+        assert!(matches!(err, EngineError::Assembly(_)));
+    }
+
+    #[test]
+    fn pin_layer_index_out_of_range_is_an_error() {
+        let err = assemble_with_pins(
+            &eth_ipv4_tcp(),
+            &[FieldPin { layer_index: 9, field_name: "EtherType".into(), bytes: vec![0x00, 0x00] }],
+        )
+        .unwrap_err();
+        assert!(matches!(err, EngineError::Assembly(_)));
     }
 }

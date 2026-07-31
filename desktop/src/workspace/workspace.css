@@ -437,3 +437,179 @@
   background: var(--accent-soft-bg);
   border-radius: 4px;
 }
+
+/* ---- protocol-stack composer ---- */
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.composer-toolbar {
+  gap: 0.5rem;
+}
+
+.composer-panes {
+  display: grid;
+  grid-template-columns: 150px 1fr 1.2fr;
+  gap: 0.5rem;
+  min-height: 240px;
+}
+
+.composer-palette,
+.composer-stack,
+.composer-inspector {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: var(--bg-panel);
+  overflow-y: auto;
+}
+
+.composer-palette h3,
+.composer-stack h3,
+.composer-inspector h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.9em;
+}
+
+.composer-palette-cat {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.composer-palette-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 2px;
+  padding: 0.3em 0.5em;
+  font-size: 0.85em;
+}
+
+.composer-palette-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.composer-stack-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.composer-layer {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.composer-layer:hover {
+  border-color: var(--accent);
+}
+
+.composer-layer.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
+}
+
+.composer-layer-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.composer-layer-badge {
+  font-size: 0.7em;
+  padding: 0.1em 0.4em;
+  border-radius: 10px;
+  background: var(--accent-2-soft-bg);
+  color: var(--accent-2-soft-text);
+}
+
+.composer-layer-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.composer-layer-controls button {
+  padding: 0.1em 0.4em;
+  font-size: 0.85em;
+  line-height: 1;
+}
+
+.composer-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.composer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.composer-field-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.composer-field-role {
+  font-size: 0.7em;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+.composer-field-role.role-derived,
+.composer-field-role.role-fixed {
+  color: var(--accent-2-soft-text);
+}
+
+.composer-field-role.role-auto_linked {
+  color: var(--accent-soft-text);
+}
+
+.composer-field-input {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.composer-field-input:disabled {
+  opacity: 0.5;
+}
+
+.composer-field.invalid .composer-field-input {
+  border-color: var(--error);
+}
+
+.composer-tristate {
+  display: flex;
+  gap: 0.2rem;
+  width: fit-content;
+}
+
+.composer-tristate .theme-option {
+  font-size: 0.75em;
+  padding: 0.1em 0.5em;
+}
+
+.composer-code {
+  min-height: 120px;
+}

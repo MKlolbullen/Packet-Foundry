@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { PacketDocument, ProtocolSpec } from "../types";
 import { formatFieldValue, hexToBytes, locationString } from "../packet";
 import SplitPane from "../SplitPane";
+import Composer from "../composer/Composer";
 import Breadcrumbs from "./Breadcrumbs";
 import PacketOutline from "./PacketOutline";
 import SemanticStage from "./SemanticStage";
@@ -147,9 +148,10 @@ function SemanticWorkspace({
 
 export default function Workspace({ active }: { active: boolean }) {
   const [stackText, setStackText] = useState("");
-  // "spec" assembles a ProtocolSpec[] forward into bytes; "bytes" dissects a raw hex capture
-  // backward into layers/fields. Both feed the same doc, so the whole workspace works on either.
-  const [inputMode, setInputMode] = useState<"spec" | "bytes">("spec");
+  // "compose" builds a stack visually (the default entry point); "spec" edits the raw
+  // ProtocolSpec[] JSON; "bytes" dissects a raw hex capture backward. All three feed the same doc,
+  // so the whole workspace works on any of them.
+  const [inputMode, setInputMode] = useState<"compose" | "spec" | "bytes">("compose");
   const [hexText, setHexText] = useState("");
   const [docState, dispatchDoc] = useReducer(documentHistoryReducer, INITIAL_DOCUMENT_HISTORY);
   const doc = docState.current;
@@ -180,11 +182,13 @@ export default function Workspace({ active }: { active: boolean }) {
     }
   }
 
+  // Seed the Spec-mode textarea with the default stack for when the user switches to it. The
+  // initial assemble is driven by the Composer (the default mode), which seeds and builds the same
+  // stack itself — so we don't also assemble here and race two SETs onto the document.
   useEffect(() => {
     (async () => {
       const stack = await invoke<ProtocolSpec[]>("default_stack");
       setStackText(JSON.stringify(stack, null, 2));
-      await assemble(stack);
     })();
   }, []);
 
@@ -235,21 +239,31 @@ export default function Workspace({ active }: { active: boolean }) {
           <h2>Build</h2>
           <div className="edit-mode-toggle" role="radiogroup" aria-label="Input mode">
             <button
+              className={inputMode === "compose" ? "theme-option active" : "theme-option"}
+              aria-pressed={inputMode === "compose"}
+              onClick={() => setInputMode("compose")}
+            >
+              Compose
+            </button>
+            <button
               className={inputMode === "spec" ? "theme-option active" : "theme-option"}
               aria-pressed={inputMode === "spec"}
               onClick={() => setInputMode("spec")}
             >
-              Assemble from spec
+              Spec JSON
             </button>
             <button
               className={inputMode === "bytes" ? "theme-option active" : "theme-option"}
               aria-pressed={inputMode === "bytes"}
               onClick={() => setInputMode("bytes")}
             >
-              Dissect from bytes
+              Dissect bytes
             </button>
           </div>
-          {inputMode === "spec" ? (
+          {inputMode === "compose" && (
+            <Composer onDocument={(d) => dispatchDoc({ type: "SET", document: d })} onError={setError} />
+          )}
+          {inputMode === "spec" && (
             <>
               <p className="hint">Edit the protocol stack (an array of `ProtocolSpec`) and assemble it.</p>
               <textarea
@@ -265,7 +279,8 @@ export default function Workspace({ active }: { active: boolean }) {
                 </button>
               </div>
             </>
-          ) : (
+          )}
+          {inputMode === "bytes" && (
             <>
               <p className="hint">
                 Paste a raw packet's hex (an Ethernet II frame — spaces and newlines are fine) and

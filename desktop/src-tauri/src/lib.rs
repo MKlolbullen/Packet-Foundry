@@ -5,7 +5,10 @@
 mod llm;
 
 use packet_core::{NodeId, Operation, PacketBuffer, PacketDocument};
-use protocol_engine::{ProtocolSpec, assemble, dissect, evaluate, resolve, validate};
+use protocol_engine::{
+    FieldPin, ProtocolCatalogEntry, ProtocolSpec, assemble, assemble_with_pins, catalog, dissect,
+    evaluate, resolve, validate,
+};
 
 /// A protocol stack that assembles a valid Ethernet/IPv4/TCP SYN — the same packet the CLI's
 /// README quick start builds. Used to seed the UI with something real to look at.
@@ -32,6 +35,47 @@ fn default_stack() -> Vec<ProtocolSpec> {
 #[tauri::command]
 fn create_packet(protocols: Vec<ProtocolSpec>) -> Result<PacketDocument, String> {
     assemble(&protocols).map_err(|e| e.to_string())
+}
+
+/// The engine-owned protocol catalogue: one descriptor per built-in protocol, with categories,
+/// parent/child compatibility, and per-field metadata (kind, width, default, role). The composer
+/// renders its forms and gates its palette from this — no protocol knowledge is hardcoded in the UI.
+#[tauri::command]
+fn list_protocols() -> Vec<ProtocolCatalogEntry> {
+    catalog()
+}
+
+/// One layer the composer places: a protocol id (as in the catalogue / `ProtocolSpec::from_name`)
+/// plus, for `raw`, its payload bytes (whose value lives in the spec, not a pin).
+#[derive(serde::Deserialize)]
+struct ComposedLayer {
+    protocol: String,
+    #[serde(default)]
+    raw_bytes: Vec<u8>,
+}
+
+/// Assemble a composed stack: protocol ids plus per-field pins (the composer's Auto/Pinned/Invalid
+/// states). Every user-entered value rides as a pin, so the layers are just protocol identities
+/// (default params) — the frontend needs no per-protocol parameter knowledge. A pin overrides its
+/// field's bytes before the resolve pass, so a user-entered or deliberately-invalid value wins over
+/// the assembler's auto-linking while derived fields still recompute over it.
+#[tauri::command]
+fn create_packet_composed(
+    layers: Vec<ComposedLayer>,
+    pins: Vec<FieldPin>,
+) -> Result<PacketDocument, String> {
+    let specs: Result<Vec<ProtocolSpec>, String> = layers
+        .iter()
+        .map(|l| {
+            if l.protocol == "raw" {
+                Ok(ProtocolSpec::Raw(l.raw_bytes.clone()))
+            } else {
+                ProtocolSpec::from_name(&l.protocol)
+                    .ok_or_else(|| format!("unknown protocol `{}`", l.protocol))
+            }
+        })
+        .collect();
+    assemble_with_pins(&specs?, &pins).map_err(|e| e.to_string())
 }
 
 /// Load a packet from its JSON form and return it with freshly-computed diagnostics — the
@@ -142,6 +186,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             default_stack,
             create_packet,
+            create_packet_composed,
+            list_protocols,
             inspect_packet,
             dissect_hex,
             evaluate_operation,
